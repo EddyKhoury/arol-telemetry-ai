@@ -1,0 +1,6 @@
+data:
+  pools:
+    sample:
+      - data/sample.csv
+
+  n_heads: null
