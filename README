@@ -1,0 +1,191 @@
+================================================================================
+AROL AGENTIC TELEMETRY ANALYSIS
+System and Device Programming - Project Q3
+Multi-Agent System (MAS) for Industrial IoT Data Refinement and Analytics
+================================================================================
+
+WHAT THIS IS
+--------------------------------------------------------------------------------
+A chatbot that analyses capping-machine telemetry, built so that the language
+model never touches the arithmetic.
+
+A user asks a question in plain language ("what is the success rate per head?",
+"is anything wrong with head 26?"). An orchestrator agent decides which
+analysis tools to call and in what order; deterministic Python functions do
+every calculation; a report assembler writes the answer around the numbers.
+
+The model chooses tools. It never sees a raw telemetry row and never computes
+a value. That is what makes the output repeatable: the same question returns
+the same numbers every time, and a test asserts it.
+
+
+REQUIREMENTS
+--------------------------------------------------------------------------------
+Python 3.11 or newer, plus:
+
+    pandas, numpy, scipy, pyyaml, pyarrow, matplotlib, pytest
+
+Install with:
+
+    pip install -r requirements.txt
+
+No API key and no network access are needed for anything described below: the
+default planner is rule-based. The LLM planner is optional (see STEP 4).
+
+
+HOW TO RUN
+--------------------------------------------------------------------------------
+All commands are run from the repository root.
+
+  List the analysis tools the agent can call:
+      python -m src.interface.cli tools
+
+  List the available data pools:
+      python -m src.interface.cli pools
+
+  Generate a canned report (kpi | anomalies | idle | throughput):
+      python -m src.interface.cli report kpi
+      python -m src.interface.cli report anomalies
+
+  Ask a question in plain language:
+      python -m src.interface.cli ask "is anything wrong with the machine?"
+      python -m src.interface.cli ask "idle periods on head 5"
+      python -m src.interface.cli ask "throughput by hour"
+
+  Interactive session:
+      python -m src.interface.cli chat
+
+  Global options (these go BEFORE the subcommand):
+      --config PATH   use a different config file
+      --pool NAME     analyse a specific pool
+      --no-save       print only; do not write report and trace files
+
+Reports are written to reports/ and the matching tool-call trace to logs/.
+
+
+RUNNING THE TESTS
+--------------------------------------------------------------------------------
+      python -m pytest tests -q
+
+The suite covers the integration contract (schema, status decoding, envelope,
+registry), the KPI tools, the agent loop including its failure paths, and a
+ground-truth evaluation that measures anomaly detection against faults
+deliberately injected into the synthetic data.
+
+
+DATA
+--------------------------------------------------------------------------------
+Two sources, selected by one key in config.yaml:
+
+    data:
+      source: synthetic     # or: real
+
+  synthetic  Generated events with faults injected at known locations. Used
+             for development and as the ground truth for evaluation. Needs no
+             telemetry files. This is the default.
+
+  real       Person A's WP1 loader over the AROL CSV files. Point
+             data.pools at the day-files first.
+
+Everything else is identical between the two: both produce the same event
+table, and the same tests run against either.
+
+INPUT FORMAT (real source)
+  One CSV per machine per day, ~57 MB, 86,400 rows (one sample per second).
+  Columns: a single "timestamp", then three per head - "H## Count",
+  "H## AppTorque", "H## Status" - for 36 heads (109 columns in total).
+  Head count is auto-detected, not hard-coded.
+
+  A closure is a +1 increment of a head's counter. Its torque and status sit
+  on the same row as the increment. Files in a pool are read in timestamp
+  order and treated as ONE continuous counter stream, so a closure that
+  straddles midnight is still detected.
+
+EVENT TABLE (what every analysis tool consumes)
+  One row per closure event:
+
+    ts             plant-local naive timestamp of the increment
+    pool_id        which pool the event came from
+    machine_id     parsed from the filename
+    head_id        H01 .. H36
+    head_index     1 .. 36, for numeric sort order
+    torque         AppTorque on the increment row, Nm
+    status         raw status code
+    error_class    decoded name (Closure OK / No Load / Bad Closure / Unknown)
+    reject_signal  status bit 0
+    cap_present    a cap was actually applied
+    count_delta    counter increment that produced this event
+    inferred       True when count_delta > 1 (a dropped poll)
+
+STATUS CODES
+  Observed in the real data: 0, 2 and 65 only.
+
+    0    Closure OK    a cap was applied successfully, torque about 2.0 Nm
+    2    No Load       the head cycled with no cap present, torque about 0
+    65   Bad Closure   a reject; rare (single digits per file)
+
+  Decoded as a bitfield rather than an enum: bit 0 is the reject flag and the
+  high bits are the error category, so 65 == 64 | 1. Unseen codes decode to
+  "Unknown (<code>)" and are marked unconfirmed instead of crashing.
+
+  IMPORTANT: the success rate uses cap-present closures as its denominator.
+  A No Load cycle is not a failed closure - there was no cap to close - so
+  counting it as a failure understates performance badly. Reports always
+  state which denominator was used and give both numbers.
+
+
+CONFIGURATION
+--------------------------------------------------------------------------------
+Everything lives in config.yaml; nothing is hard-coded. Copy it to
+config.local.yaml to override values locally without touching the shared file
+(config.local.yaml is gitignored).
+
+    data.source        synthetic | real
+    data.pools         ordered day-files per pool
+    data.timezone      plant-local timezone the timestamps are recorded in
+    analytics.*        thresholds (sigma, idle window, min_n, torque range)
+    agent.planner      rules | llm
+    agent.model        model id used by the LLM planner
+
+
+REPOSITORY LAYOUT
+--------------------------------------------------------------------------------
+    config.yaml            all paths, thresholds and parameters
+    src/common/            schema, envelope, registry, config, time helpers
+    src/ingestion/         Person A: loader, validation, closure detection
+    src/analytics/         analysis tools (Person B: KPI half)
+    src/agent/             orchestrator, planner, report assembler, trace log
+    src/interface/         CLI
+    src/testing/           synthetic generator with injected faults
+    tests/                 test suite
+    docs/                  contract, audit, architecture notes
+    reports/               generated reports    (gitignored)
+    logs/                  generated traces     (gitignored)
+
+
+DIVISION OF WORK
+--------------------------------------------------------------------------------
+    Person A   ingestion (WP1), statistical tools: torque distributions,
+               drift detection, correlation, torque-based anomalies
+    Person B   KPI tools, orchestrator, planner, report assembler, trace log,
+               CLI and chat, synthetic generator, integration tests
+    Both       the integration contract in docs/contract.md, tool schemas,
+               agent prompts, the demo and the presentation
+
+The two halves meet at the event table and the tool registry, both defined in
+docs/contract.md. Neither side may change that shape alone.
+
+
+STATUS
+--------------------------------------------------------------------------------
+Working now:
+    event-table schema and validation, status decoding, tool registry with
+    generated JSON schemas, five KPI tools, the rule-based planner, the
+    orchestrator loop with retry and graceful degradation, the report
+    assembler, the trace log, the CLI, the synthetic generator with ground
+    truth, and the test suite.
+
+Not yet built:
+    Person A's real loader (src/ingestion/api.py is a stub), his statistical
+    tools, the LLM planner, plots, HTML and PDF export, and the scaling
+    benchmark.

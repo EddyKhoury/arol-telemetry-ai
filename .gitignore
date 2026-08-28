@@ -1,0 +1,30 @@
+# Telemetry data: ~57 MB per day-file. Never commit.
+data/
+*.csv
+*.parquet
+cache/
+
+# Generated output
+reports/
+logs/
+*.png
+*.html
+*.pdf.out
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Local secrets (API keys for the LLM planner)
+.env
+config.local.yaml
+
+# OS / editor
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

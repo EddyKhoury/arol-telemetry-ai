@@ -1,0 +1,54 @@
+# Single source of truth for paths, thresholds and parameters.
+# Nothing is hard-coded in the source; the brief requires this.
+#
+# Section ownership (audit F2 - ownership is per key, not per section):
+#   data.*       Person A   (ingestion), except cache_* which the agent relies on
+#   analytics.*  shared     - A owns torque/drift/anomaly, B owns idle/kpi
+#   agent.*      Person B
+# Copy to config.local.yaml to override anything locally; that file is gitignored.
+
+schema_version: "1.0"
+
+data:
+  # synthetic -> src/testing/synth.py   |   real -> src/ingestion/api.py
+  # This one key is the Phase-5 swap. Nothing else changes.
+  source: synthetic
+
+  # Plant-local timezone the raw timestamps are recorded in. Reported in
+  # pool_meta; never applied to the values themselves (audit F5).
+  timezone: Europe/Rome
+
+  # A pool is an ordered list of day-files for one machine, processed as one
+  # continuous counter stream. Fill in when Person A shares the CSVs.
+  pools:
+    feb: []
+    mar: []
+    apr: []
+
+  n_heads: null            # null = auto-detect from the columns
+  cache_dir: cache         # Parquet event-table cache (audit F8)
+  use_cache: true
+
+  synthetic:
+    seed: 20260828
+    days: 1
+    n_heads: 36
+    machine_id: MCC777-01
+    start: "2026-02-01 00:00:00"
+    closure_interval_seconds: 6.0
+
+analytics:
+  torque_expected_min: 1.5
+  torque_expected_max: 2.5
+  drift_window_seconds: 3600
+  idle_window_seconds: 300      # sustained No Load = idle
+  anomaly_sigma: 3.0
+  min_n: 30                     # below this, results are reported as not significant
+
+agent:
+  planner: rules                # rules | llm  (rules is the deterministic fallback)
+  model: claude-sonnet-5
+  temperature: 0.0
+  max_steps: 8
+  report_dir: reports
+  trace_dir: logs
