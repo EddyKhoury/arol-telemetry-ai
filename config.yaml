@@ -4,3 +4,6 @@ data:
       - data/sample.csv
 
   n_heads: null
+
+  units:
+    AppTorque: Nm
