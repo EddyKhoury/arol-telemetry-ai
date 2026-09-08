@@ -1501,11 +1501,361 @@ This confirms Step 6 did not regress the loader or validation layers.
 
 ---
 
-# 33. Updated project status
+# 33. Step 7 — Event assembly
+
+**Status:** COMPLETE  
+**Step 7 tests:** 18/18 passed  
+**Full project suite after Step 7:** 53/53 passed  
+**Current milestone:** M2 in progress  
+**Next step:** Step 8 — per-closure timestamp and incremental capping speed
+
+Step 7 converts each raw closure detected in Step 6 into one event record and decodes the raw status code into semantic fields.
+
+The working specification requires:
+
+- one detected closure → exactly one event row
+- every known status code maps to the correct `error_class`
+- odd reject codes set `reject_signal = True`
+- even paired codes set `reject_signal = False`
+- unknown status codes are explicitly flagged instead of silently mislabeled
+
+---
+
+# 34. `STATUS_MAP`
+
+File:
 
 ```text
-M0 — Contract locked
-    Steps 1–3 ✅ / governance decisions remain documented
+src/ingestion/event_assembly.py
+```
+
+The decoder uses a lookup table rather than a long chain of `if` statements:
+
+```python
+STATUS_MAP = {
+    0: ("Closure OK", False),
+    2: ("No Load", False),
+    3: ("No Load", True),
+    4: ("No Closure", False),
+    5: ("No Closure", True),
+    8: ("No InTorque", False),
+    9: ("No InTorque", True),
+    16: ("No CapTurns", False),
+    17: ("No CapTurns", True),
+    32: ("Following Error", False),
+    33: ("Following Error", True),
+    64: ("Bad Closure", False),
+    65: ("Bad Closure", True),
+}
+```
+
+Each dictionary value stores:
+
+```text
+(error_class, reject_signal)
+```
+
+Example:
+
+```python
+STATUS_MAP[33]
+```
+
+returns:
+
+```python
+("Following Error", True)
+```
+
+This makes the complete brief status table explicit and easy to extend.
+
+---
+
+# 35. `CAP_PRESENT_MAP`
+
+The contract explicitly defines `cap_present` for the status codes actually observed in the real pools:
+
+```python
+CAP_PRESENT_MAP = {
+    0: True,
+    2: False,
+    65: True,
+}
+```
+
+Meaning:
+
+```text
+0  -> cap applied / present
+2  -> No Load, no cap present
+65 -> cap present but closure rejected
+```
+
+For brief status codes whose cap-presence meaning is not explicitly defined by the current contract, the implementation currently returns `None` rather than inventing a Boolean value.
+
+**Open schema assumption:** before Step 9 freezes the clean event table, the team should decide whether statuses `3, 4, 5, 8, 9, 16, 17, 32, 33, 64` need explicit `cap_present` semantics. Until that is defined, `None` is used to mean "not specified by the current source contract."
+
+---
+
+# 36. `decode_status(status)`
+
+Purpose:
+
+Decode one raw status code.
+
+For a known code, the function retrieves:
+
+```python
+error_class, reject_signal = STATUS_MAP[status]
+```
+
+and returns:
+
+```python
+{
+    "error_class": error_class,
+    "reject_signal": reject_signal,
+    "cap_present": CAP_PRESENT_MAP.get(status),
+}
+```
+
+For an unknown code such as:
+
+```text
+99
+```
+
+the function returns:
+
+```python
+{
+    "error_class": "Unknown (99)",
+    "reject_signal": None,
+    "cap_present": None,
+}
+```
+
+This deliberately avoids crashing and avoids silently assigning an incorrect known class.
+
+---
+
+# 37. `assemble_event(closure, machine_id)`
+
+Purpose:
+
+Convert one raw Step 6 closure record into one event-table record.
+
+Step 6 closure example:
+
+```python
+{
+    "row_index": 2,
+    "head_id": "H01",
+    "torque": 2.05,
+    "status": 65,
+    "timestamp": pd.Timestamp("2026-02-01 10:00:02"),
+}
+```
+
+Step 7 first decodes:
+
+```python
+decoded = decode_status(closure["status"])
+```
+
+and returns exactly these event fields:
+
+```python
+{
+    "ts": closure["timestamp"],
+    "machine_id": machine_id,
+    "head_id": closure["head_id"],
+    "torque": closure["torque"],
+    "status": closure["status"],
+    "error_class": decoded["error_class"],
+    "reject_signal": decoded["reject_signal"],
+    "cap_present": decoded["cap_present"],
+}
+```
+
+`row_index` is intentionally not emitted into the contract event schema. It remains an internal Step 6/debugging field.
+
+---
+
+# 38. Step 7 status rules
+
+| status | error_class | reject_signal |
+|---:|---|---|
+| 0 | Closure OK | False |
+| 2 | No Load | False |
+| 3 | No Load | True |
+| 4 | No Closure | False |
+| 5 | No Closure | True |
+| 8 | No InTorque | False |
+| 9 | No InTorque | True |
+| 16 | No CapTurns | False |
+| 17 | No CapTurns | True |
+| 32 | Following Error | False |
+| 33 | Following Error | True |
+| 64 | Bad Closure | False |
+| 65 | Bad Closure | True |
+
+Explicit odd reject codes proven by tests:
+
+```text
+3, 5, 9, 17, 33, 65
+```
+
+All evaluate to:
+
+```python
+True
+```
+
+---
+
+# 39. Step 7 tests
+
+File:
+
+```text
+tests/test_event_assembly.py
+```
+
+The file currently contains 18 pytest cases when parameterized cases are expanded.
+
+Coverage includes:
+
+## Direct real-data decoding tests
+
+```text
+status 0  -> Closure OK / reject False / cap_present True
+status 2  -> No Load / reject False / cap_present False
+status 65 -> Bad Closure / reject True / cap_present True
+```
+
+## Unknown-status test
+
+```text
+99 -> Unknown (99)
+```
+
+with:
+
+```text
+reject_signal = None
+cap_present = None
+```
+
+## Full parameterized status-table test
+
+All 13 known brief status codes are checked against the correct:
+
+```text
+error_class
+reject_signal
+```
+
+## Event-schema assembly test
+
+One synthetic Step 6 closure is converted into one Step 7 event.
+
+The test verifies the exact output keys:
+
+```text
+ts
+machine_id
+head_id
+torque
+status
+error_class
+reject_signal
+cap_present
+```
+
+It also verifies representative values and types:
+
+```text
+ts            -> pandas Timestamp
+machine_id    -> str
+head_id       -> str
+torque        -> float
+status        -> int
+error_class   -> str
+reject_signal -> bool
+cap_present   -> bool
+```
+
+for the tested status-65 event.
+
+Step 7 focused test result:
+
+```text
+18 passed
+```
+
+---
+
+# 40. Step 7 audit result
+
+| Requirement | Status |
+|---|---|
+| Output uses the contract event fields | PASS |
+| Known status codes decode correctly | PASS |
+| Odd reject codes are `True` | PASS |
+| Even paired codes are `False` | PASS |
+| One closure produces one event | PASS |
+| Unknown status explicitly flagged | PASS |
+| Representative event values tested | PASS |
+| Representative event types tested | PASS |
+
+**Step 7: COMPLETE**
+
+Important documented caveat:
+
+```text
+cap_present is contract-defined for 0, 2, and 65.
+Other brief codes currently use None until semantics are agreed.
+```
+
+This must be revisited before Step 9 freezes the clean event table.
+
+---
+
+# 41. Full regression result after Step 7
+
+The complete repository suite was run:
+
+```bash
+.venv/bin/python -m pytest -v
+```
+
+Result:
+
+```text
+53 passed in 0.48s
+```
+
+Breakdown:
+
+```text
+Closure detection:  7 / 7
+Event assembly:     18 / 18
+Loader:             12 / 12
+Validation:         16 / 16
+--------------------------------
+Total:              53 / 53 PASS
+```
+
+This proves the Step 7 changes did not regress Steps 4–6.
+
+---
+
+# 42. Updated project status
+
+```text
+M0 — Contract
+    Steps 1–3 documented; shared governance/sign-off should remain explicit
 
 M1 — Data loads & validates
     Step 4 ✅
@@ -1513,7 +1863,7 @@ M1 — Data loads & validates
 
 M2 — Event table exists
     Step 6 ✅
-    Step 7 ❌
+    Step 7 ✅
     Step 8 ❌
     Step 9 ❌
 
@@ -1533,13 +1883,13 @@ M6 — Integrated
 Current position:
 
 ```text
-Step 6 of 22 complete
-Next: Step 7 — Event assembly
+Step 7 of 22 complete
+Next: Step 8 — per-closure timestamp and incremental capping speed
 ```
 
 ---
 
-# 34. Current pipeline
+# 43. Current pipeline
 
 ```text
 config.yaml
@@ -1569,63 +1919,59 @@ VALIDATION REPORT
 detect_head_closures(df, head_id)
       │
       ▼
-RAW CLOSURE RECORDS FOR ONE HEAD
+RAW CLOSURE RECORD
+      │
+      ▼
+decode_status(status)
+      │
+      ▼
+assemble_event(closure, machine_id)
+      │
+      ▼
+ONE CONTRACT EVENT RECORD
 ```
 
 Not yet implemented:
 
-- full all-head event assembly
-- status decoding
-- `error_class`
-- `reject_signal`
-- `cap_present`
-- `machine_id`
-- final clean event table
-- capping speed
-- statistical analytics
-- agent tool schemas
+- incremental capping-speed calculation
+- final all-head clean event-table emission
+- Step 9 final schema stabilization
+- torque/statistical analytics
+- agent tool interface
 
 ---
 
-# 35. Step 7 preview — Event assembly
+# 44. Step 8 preview — timestamps and incremental capping speed
 
-**Status:** NOT STARTED
+Step 8 requires two things:
 
-Step 7 will convert raw closure records into the agreed event-table fields.
+1. every closure keeps the timestamp of the row where its Count incremented
+2. capping speed is calculated in pieces/hour using an **incremental average**, rather than recomputing the entire historical average after each new closure
 
-Current contract target:
+The timestamp path is already partly established:
 
 ```text
-ts
-machine_id
-head_id
-torque
-status
-error_class
-reject_signal
-cap_present
+increment row timestamp
+        ↓
+Step 6 closure["timestamp"]
+        ↓
+Step 7 event["ts"]
 ```
 
-Observed real-data status mapping:
+Step 8 must now prove that behavior with focused tests and implement the incremental capping-speed calculation.
 
-| status | error_class | reject_signal | cap_present |
-|---:|---|---|---|
-| 0 | Closure OK | false | true |
-| 2 | No Load | false | false |
-| 65 | Bad Closure | true | true |
-
-Unseen codes must be handled explicitly instead of silently mislabeled.
+The working specification requires the incremental average to be checked against a small hand-calculated example.
 
 ---
 
-# 36. Git checkpoint
+# 45. Git checkpoint after Step 7
 
-After adding this audit update, Step 6 should be committed and pushed:
+Recommended checkpoint:
 
 ```bash
 git status
 git add .
-git commit -m "Implement and test closure detection"
+git commit -m "Implement and test event assembly"
 git push
 ```
 
@@ -1643,16 +1989,18 @@ nothing to commit, working tree clean
 
 ---
 
-# 37. Audit snapshot after Step 6
+# 46. Audit snapshot after Step 7
 
 **Python:** 3.12.14  
 **Sample input:** 17 rows × 109 columns  
 **Loader:** complete  
 **Validation:** complete  
 **Closure detection:** complete  
+**Event assembly:** complete  
 **Loader tests:** 12/12 pass  
 **Validation tests:** 16/16 pass  
 **Closure tests:** 7/7 pass  
-**Total confirmed tests:** 35/35 pass  
-**Current milestone:** M1 complete; M2 in progress  
-**Next step:** Step 7 — event assembly
+**Event-assembly tests:** 18/18 pass  
+**Total confirmed tests:** 53/53 pass  
+**Current milestone:** M2 in progress  
+**Next step:** Step 8 — per-closure timestamp and incremental capping speed
