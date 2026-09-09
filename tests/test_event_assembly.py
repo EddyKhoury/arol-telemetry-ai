@@ -2,6 +2,7 @@ import pandas as pd
 import pytest
 
 from src.ingestion.event_assembly import decode_status, assemble_event
+from src.ingestion.closure_detection import detect_head_closures
 
 
 def test_status_zero_decodes_to_closure_ok():
@@ -110,3 +111,46 @@ def test_assemble_event_matches_event_schema():
     assert isinstance(event["error_class"], str)
     assert isinstance(event["reject_signal"], bool)
     assert isinstance(event["cap_present"], bool)
+
+
+def test_event_keeps_timestamp_of_count_increment_row():
+    df = pd.DataFrame({
+        "timestamp": pd.to_datetime([
+            "2026-02-01 10:00:00",
+            "2026-02-01 10:00:01",
+            "2026-02-01 10:00:02",
+            "2026-02-01 10:00:03",
+        ]),
+        "H01 Count": [
+            100,
+            100,
+            101,
+            101,
+        ],
+        "H01 AppTorque": [
+            0.0,
+            0.0,
+            2.05,
+            0.0,
+        ],
+        "H01 Status": [
+            0,
+            0,
+            65,
+            0,
+        ],
+    })
+
+    closures = detect_head_closures(
+        df,
+        "H01",
+    )
+
+    event = assemble_event(
+        closures[0],
+        machine_id="MCC777",
+    )
+
+    assert event["ts"] == pd.Timestamp(
+        "2026-02-01 10:00:02"
+    )

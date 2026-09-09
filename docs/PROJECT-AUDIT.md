@@ -1941,37 +1941,275 @@ Not yet implemented:
 
 ---
 
-# 44. Step 8 preview — timestamps and incremental capping speed
+# 44. Step 8 — Timestamp preservation and incremental capping speed
 
-Step 8 requires two things:
+**Status:** COMPLETE  
+**Focused Step 8 tests:** 7/7 passed  
+**Event timestamp integration test:** PASS  
+**Full project suite:** 61/61 passed  
+**Current milestone:** M2 in progress  
+**Next step:** Step 9 — final clean all-head event table
 
-1. every closure keeps the timestamp of the row where its Count incremented
-2. capping speed is calculated in pieces/hour using an **incremental average**, rather than recomputing the entire historical average after each new closure
+Step 8 covers two requirements:
 
-The timestamp path is already partly established:
-
-```text
-increment row timestamp
-        ↓
-Step 6 closure["timestamp"]
-        ↓
-Step 7 event["ts"]
-```
-
-Step 8 must now prove that behavior with focused tests and implement the incremental capping-speed calculation.
-
-The working specification requires the incremental average to be checked against a small hand-calculated example.
+1. preserve the timestamp of the row where the closure counter increments;
+2. compute capping speed in pieces/hour with an incremental running average.
 
 ---
 
-# 45. Git checkpoint after Step 7
+# 45. `incremental_average(current_mean, new_value, n)`
 
-Recommended checkpoint:
+File:
+
+```text
+src/analytics/capping_speed.py
+```
+
+Implementation:
+
+```python
+def incremental_average(current_mean, new_value, n):
+    return current_mean + (new_value - current_mean) / n
+```
+
+Hand-calculated verification:
+
+```text
+values:        7200, 10800, 3600
+running means: 7200, 9000, 7200
+```
+
+This confirms the incremental formula matches the ordinary arithmetic mean without recomputing the full history.
+
+---
+
+# 46. `closures_to_pieces_per_hour(closures, interval_seconds)`
+
+Implementation:
+
+```python
+def closures_to_pieces_per_hour(closures, interval_seconds):
+
+    if interval_seconds <= 0:
+        raise ValueError("interval_seconds must be greater than zero")
+
+    return closures * 3600 / interval_seconds
+```
+
+Example:
+
+```text
+2 closures in 1 second = 7200 pieces/hour
+```
+
+Zero or negative intervals are rejected explicitly.
+
+---
+
+# 47. `running_capping_speed(closures_per_interval, interval_seconds)`
+
+Implementation:
+
+```python
+def running_capping_speed(closures_per_interval, interval_seconds):
+
+    running_mean = 0.0
+    running_speeds = []
+
+    for n, closures in enumerate(closures_per_interval, start=1):
+
+        speed = closures_to_pieces_per_hour(
+            closures=closures,
+            interval_seconds=interval_seconds,
+        )
+
+        running_mean = incremental_average(
+            running_mean,
+            speed,
+            n,
+        )
+
+        running_speeds.append(running_mean)
+
+    return running_speeds
+```
+
+Example input:
+
+```python
+[2, 3, 1]
+```
+
+for one-second intervals produces instantaneous rates:
+
+```text
+7200, 10800, 3600 pieces/hour
+```
+
+and running means:
+
+```text
+7200, 9000, 7200 pieces/hour
+```
+
+Empty input returns `[]`.
+
+---
+
+# 48. Throughput interpretation
+
+The current implementation uses:
+
+```text
+closures observed in an interval × 3600 / interval_seconds
+```
+
+This avoids event-to-event divisions by zero when several heads close at the same sampled timestamp.
+
+This is a documented implementation decision because the project specification requires incremental capping speed but does not fully prescribe the estimator.
+
+---
+
+# 49. Timestamp preservation
+
+A dedicated integration test proves the timestamp survives the full path:
+
+```text
+raw increment row
+  ↓
+detect_head_closures()
+  ↓
+closure["timestamp"]
+  ↓
+assemble_event()
+  ↓
+event["ts"]
+```
+
+Synthetic example:
+
+```text
+10:00:00 -> Count 100
+10:00:01 -> Count 100
+10:00:02 -> Count 101   <- closure
+10:00:03 -> Count 101
+```
+
+Expected:
+
+```text
+event["ts"] = 2026-02-01 10:00:02
+```
+
+---
+
+# 50. Step 8 tests
+
+`tests/test_capping_speed.py`:
+
+1. `test_incremental_average_matches_hand_calculation`
+2. `test_closures_are_converted_to_pieces_per_hour`
+3. `test_zero_interval_is_rejected`
+4. `test_running_capping_speed_updates_incrementally`
+5. `test_running_capping_speed_function`
+6. `test_running_capping_speed_with_empty_input`
+7. `test_running_capping_speed_rejects_zero_interval`
+
+Additional integration coverage:
+
+```text
+tests/test_event_assembly.py::test_event_keeps_timestamp_of_count_increment_row
+```
+
+---
+
+# 51. Step 8 audit result
+
+| Requirement | Status |
+|---|---|
+| Closure keeps increment-row timestamp | PASS |
+| Timestamp tested end-to-end | PASS |
+| Throughput in pieces/hour | PASS |
+| Incremental average implemented | PASS |
+| Hand-calculated example matched | PASS |
+| Zero interval handled | PASS |
+| Empty input handled | PASS |
+| Running-speed wrapper tested | PASS |
+
+**Step 8: COMPLETE**
+
+---
+
+# 52. Full regression result after Step 8
+
+```text
+Closure detection:   7
+Event assembly:      19
+Loader:              12
+Validation:          16
+Capping speed:        7
+--------------------------------
+Total:               61 / 61 PASS
+```
+
+---
+
+# 53. Current project status
+
+```text
+M1 — Data loads & validates
+    Step 4 ✅
+    Step 5 ✅
+
+M2 — Event table exists
+    Step 6 ✅
+    Step 7 ✅
+    Step 8 ✅
+    Step 9 ❌
+```
+
+Current position:
+
+```text
+Step 8 of 22 complete
+Next: Step 9 — final clean all-head event table
+```
+
+---
+
+# 54. Step 9 preview
+
+Step 9 should:
+
+- auto-detect available heads
+- run closure detection for each head
+- assemble exactly one event per closure
+- combine all events into one DataFrame
+- preserve chronological ordering
+- avoid duplicate events
+- return an empty DataFrame with the correct schema when there are no closures
+
+Target event fields:
+
+```text
+ts
+machine_id
+head_id
+torque
+status
+error_class
+reject_signal
+cap_present
+```
+
+---
+
+# 55. Git checkpoint after Step 8
 
 ```bash
 git status
 git add .
-git commit -m "Implement and test event assembly"
+git commit -m "Implement incremental capping speed"
 git push
 ```
 
@@ -1989,18 +2227,19 @@ nothing to commit, working tree clean
 
 ---
 
-# 46. Audit snapshot after Step 7
+# 56. Audit snapshot after Step 8
 
 **Python:** 3.12.14  
-**Sample input:** 17 rows × 109 columns  
 **Loader:** complete  
 **Validation:** complete  
 **Closure detection:** complete  
 **Event assembly:** complete  
+**Capping speed:** complete  
 **Loader tests:** 12/12 pass  
 **Validation tests:** 16/16 pass  
 **Closure tests:** 7/7 pass  
-**Event-assembly tests:** 18/18 pass  
-**Total confirmed tests:** 53/53 pass  
+**Event-assembly tests:** 19/19 pass  
+**Capping-speed tests:** 7/7 pass  
+**Total confirmed tests:** 61/61 pass  
 **Current milestone:** M2 in progress  
-**Next step:** Step 8 — per-closure timestamp and incremental capping speed
+**Next step:** Step 9 — final clean all-head event table
