@@ -9,6 +9,7 @@ import pandas as pd
 # PyYAML allows Python to read our config.yaml file.
 import yaml
 
+import polars as pl
 
 # Custom error specifically for problems that happen during loading.
 # This makes loader errors easier to understand than raw Python exceptions.
@@ -364,3 +365,23 @@ def scan_parquet_file(file_path):
         raise FileNotFoundError(f"Parquet file not found: {file_path}")
 
     return pl.scan_parquet(file_path)
+
+def scan_parquet_pool(file_paths):
+    paths = [Path(file_path) for file_path in file_paths]
+
+    if not paths:
+        raise ValueError("Parquet pool cannot be empty.")
+
+    for path in paths:
+        if not path.exists():
+            raise FileNotFoundError(f"Parquet file not found: {path}")
+
+    lazy_frames = [
+        pl.scan_parquet(path)
+        for path in paths
+    ]
+
+    return pl.concat(
+        lazy_frames,
+        how="vertical",
+    )

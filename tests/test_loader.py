@@ -3,7 +3,7 @@ import pytest
 import yaml
 import polars as pl
 
-from src.ingestion.loader import scan_parquet_file
+from src.ingestion.loader import scan_parquet_file, scan_parquet_pool
 from src.ingestion.loader import (
     LoaderError,
     load_config,
@@ -354,3 +354,65 @@ def test_parquet_is_loaded_lazily(tmp_path):
     lazy_df = scan_parquet_file(parquet_path)
 
     assert isinstance(lazy_df, pl.LazyFrame)
+
+def test_multiple_parquet_files_load_as_one_lazy_pool(tmp_path):
+    first_path = tmp_path / "day_1.parquet"
+    second_path = tmp_path / "day_2.parquet"
+
+    first_df = pl.DataFrame({
+        "timestamp": ["2026-02-01 10:00:00"],
+        "H01 Count": [100],
+        "H01 AppTorque": [0.0],
+        "H01 Status": [0],
+    }).with_columns(
+        pl.col("timestamp").str.strptime(
+            pl.Datetime,
+            format="%Y-%m-%d %H:%M:%S",
+        )
+    )
+
+    second_df = pl.DataFrame({
+        "timestamp": ["2026-02-01 10:00:01"],
+        "H01 Count": [101],
+        "H01 AppTorque": [2.05],
+        "H01 Status": [65],
+    }).with_columns(
+        pl.col("timestamp").str.strptime(
+            pl.Datetime,
+            format="%Y-%m-%d %H:%M:%S",
+        )
+    )
+
+    first_df.write_parquet(first_path)
+    second_df.write_parquet(second_path)
+
+    lazy_df = scan_parquet_pool([
+        first_path,
+        second_path,
+    ])
+
+    assert isinstance(lazy_df, pl.LazyFrame)
+
+    df = lazy_df.collect()
+
+    assert df.height == 2
+    assert df["H01 Count"].to_list() == [100, 101]
+
+def test_empty_parquet_pool_has_clear_error():
+    try:
+        scan_parquet_pool([])
+    except ValueError as error:
+        assert "cannot be empty" in str(error)
+    else:
+        raise AssertionError("Expected ValueError for empty Parquet pool")
+
+
+def test_missing_parquet_file_has_clear_error(tmp_path):
+    missing_path = tmp_path / "missing.parquet"
+
+    try:
+        scan_parquet_pool([missing_path])
+    except FileNotFoundError as error:
+        assert "Parquet file not found" in str(error)
+    else:
+        raise AssertionError("Expected FileNotFoundError for missing Parquet file")
