@@ -2,7 +2,7 @@
 
 **Project:** Agentic AI for Telemetry Analysis on AROL Capping Machines  
 **Role covered here:** Person A — data ingestion, validation, event-table preparation, and later deterministic analytics  
-**Current implementation status:** Steps 4–9 reference implementation complete (70/70 tests); M2.5 Polars/Parquet performance refactor in progress; Steps 4–7 refactor complete; current suite 124/124 passing; next: Step 8 Polars capping-speed calculations  
+**Current implementation status:** Steps 4–9 reference implementation complete (70/70 tests); M2.5 Polars/Parquet performance refactor in progress; Steps 4–8 refactor complete; current suite 134/134 passing; next: Step 9 final Polars event table and event Parquet  
 **Primary source documents:** `docs/contract.md` and `docs/PERSON-A-WORKING-SPEC.md` (both amended after Step 9 for the Polars/Parquet production architecture)
 
 ---
@@ -2878,8 +2878,8 @@ M2.5 — Production performance refactor
     Step 5 validation                                 ✅
     Step 6 closure detection                          ✅
     Step 7 event assembly                             ✅
-    Step 8 capping speed                              ⏭ NEXT
-    Step 9 final event table                          ⏳
+    Step 8 capping speed                              ✅
+    Step 9 final event table                          ⏭ NEXT
     Parity verification                               ⏳
     Real-data benchmark                               ⏳
 
@@ -2912,7 +2912,7 @@ M6 — Integration
 **M2.5 Step 4:** COMPLETE  
 **M2.5 Step 5:** COMPLETE  
 **M2.5 Step 6:** COMPLETE  
-**Current full suite:** 124/124 PASS  
+**Current full suite:** 134/134 PASS  
 **Benchmark:** NOT YET RUN  
 **Next implementation task:** Step 7 — refactor status decoding and event assembly to Polars while preserving the established event/status semantics.
 
@@ -3243,9 +3243,9 @@ Vectorized closure reconstruction           ✅
    ↓
 Polars status/event assembly                ⏳
    ↓
-Polars capping-speed calculations           ⏭ NEXT
+Polars capping-speed calculations           ✅
    ↓
-Final Polars event table                    ⏳
+Final Polars event table                    ⏭ NEXT
    ↓
 Event Parquet                               ⏳
    ↓
@@ -3277,8 +3277,8 @@ M2.5 — Production performance refactor
     Step 5 validation                                 ✅
     Step 6 closure detection                          ✅
     Step 7 event assembly                             ✅
-    Step 8 capping speed                              ⏭ NEXT
-    Step 9 final event table                          ⏳
+    Step 8 capping speed                              ✅
+    Step 9 final event table                          ⏭ NEXT
     Parity verification                               ⏳
     Real-data benchmark                               ⏳
 
@@ -3310,7 +3310,7 @@ M6 — Integration
 **M2:** COMPLETE  
 **M2.5 Step 4:** COMPLETE  
 **M2.5 Step 5:** COMPLETE  
-**Current full suite:** 124/124 PASS  
+**Current full suite:** 134/134 PASS  
 **Benchmark:** NOT YET RUN  
 **Next implementation task:** Step 6 — vectorized closure detection in Polars.
 
@@ -3563,9 +3563,9 @@ Vectorized Polars closure reconstruction    ✅
    ↓
 Polars status/event assembly                ✅
    ↓
-Polars capping-speed calculations           ⏭ NEXT
+Polars capping-speed calculations           ✅
    ↓
-Final Polars event table                    ⏳
+Final Polars event table                    ⏭ NEXT
    ↓
 Event Parquet                               ⏳
    ↓
@@ -3597,8 +3597,8 @@ M2.5 — Production performance refactor
     Step 5 validation                                 ✅
     Step 6 closure detection                          ✅
     Step 7 event assembly                             ✅
-    Step 8 capping speed                              ⏭ NEXT
-    Step 9 final event table                          ⏳
+    Step 8 capping speed                              ✅
+    Step 9 final event table                          ⏭ NEXT
     Parity verification                               ⏳
     Real-data benchmark                               ⏳
 
@@ -3631,7 +3631,7 @@ M6 — Integration
 **M2.5 Step 4:** COMPLETE  
 **M2.5 Step 5:** COMPLETE  
 **M2.5 Step 6:** COMPLETE  
-**Current full suite:** 124/124 PASS  
+**Current full suite:** 134/134 PASS  
 **Benchmark:** NOT YET RUN  
 **Next implementation task:** Step 7 — Polars status decoding and event assembly.
 
@@ -3896,9 +3896,9 @@ Vectorized Polars closure reconstruction    ✅
    ↓
 Polars status/event assembly                ✅
    ↓
-Polars capping-speed calculations           ⏭ NEXT
+Polars capping-speed calculations           ✅
    ↓
-Final Polars event table                    ⏳
+Final Polars event table                    ⏭ NEXT
    ↓
 Event Parquet                               ⏳
    ↓
@@ -3930,8 +3930,8 @@ M2.5 — Production performance refactor
     Step 5 validation                                 ✅
     Step 6 closure detection                          ✅
     Step 7 event assembly                             ✅
-    Step 8 capping speed                              ⏭ NEXT
-    Step 9 final event table                          ⏳
+    Step 8 capping speed                              ✅
+    Step 9 final event table                          ⏭ NEXT
     Parity verification                               ⏳
     Real-data benchmark                               ⏳
 
@@ -3965,26 +3965,296 @@ M6 — Integration
 **M2.5 Step 5:** COMPLETE  
 **M2.5 Step 6:** COMPLETE  
 **M2.5 Step 7:** COMPLETE  
-**Current full suite:** 124/124 PASS  
+**Current full suite:** 134/134 PASS  
 **Benchmark:** NOT YET RUN  
 **Next implementation task:** Step 8 — Polars capping-speed calculations.
 
 ---
 
-# 93. Immediate next-step rule — Step 8
+# 93. M2.5 — Step 8 Polars capping-speed calculations
 
-Before modifying capping-speed calculations:
+**Status:** COMPLETE  
+**New Polars capping-speed tests:** 9/9 passing  
+**Original reference capping-speed tests:** passing  
+**Full project regression:** 134/134 passing
 
-1. Inspect the existing reference `src/analytics/capping_speed.py` or current
-   capping-speed module.
-2. Inspect its existing tests.
-3. Preserve the established conversion rule:
-   `pieces_per_hour = closures * 3600 / interval_seconds`.
-4. Preserve the established incremental/running-average behavior exactly.
-5. Preserve the error behavior for non-positive interval length.
-6. Preserve empty-input behavior.
-7. Prefer Polars expressions for event-table-scale calculations.
-8. Do not introduce a Python loop over raw telemetry rows.
-9. Keep the original reference implementation untouched until parity is proven.
-10. Run the complete regression suite before declaring Step 8 complete.
-11. Update this audit again at the next checkpoint.
+The original reference implementation remains untouched:
+
+```text
+src/analytics/capping_speed.py
+tests/test_capping_speed.py
+```
+
+The production-oriented Polars implementation was added separately:
+
+```text
+src/analytics/capping_speed_polars.py
+tests/test_capping_speed_polars.py
+```
+
+## 93.1 Preserved numerical contract
+
+The reference conversion formula remains unchanged:
+
+```text
+pieces_per_hour = closures * 3600 / interval_seconds
+```
+
+The running capping-speed result remains the running arithmetic mean of the
+per-interval speeds.
+
+Reference example:
+
+```text
+closures per interval:  [2, 3, 1]
+interval_seconds:       1
+
+pieces/hour:            [7200, 10800, 3600]
+running mean:           [7200, 9000, 7200]
+```
+
+Non-positive interval lengths remain invalid.
+
+Empty input still returns an empty result.
+
+## 93.2 Scalar compatibility functions
+
+The Polars module preserves:
+
+```python
+incremental_average(current_mean, new_value, n)
+closures_to_pieces_per_hour(closures, interval_seconds)
+```
+
+These match the original scalar semantics and remain useful for parity and small
+calculations.
+
+## 93.3 Lazy production calculation
+
+Implemented:
+
+```python
+running_capping_speed_frame(
+    df,
+    interval_seconds,
+    closures_col="closures",
+)
+```
+
+Input:
+
+```text
+pl.DataFrame or pl.LazyFrame
+```
+
+Output:
+
+```text
+pl.LazyFrame
+```
+
+The production path:
+
+1. validates `interval_seconds > 0`;
+2. verifies the closures column exists;
+3. creates a 1-based interval index;
+4. computes pieces/hour with a Polars expression;
+5. computes the running arithmetic mean as cumulative sum divided by interval
+   number;
+6. returns only closures, pieces/hour, and running mean.
+
+Conceptually:
+
+```text
+closures
+   ↓
+× 3600 / interval_seconds
+   ↓
+pieces_per_hour
+   ↓
+cumulative sum
+   ↓
+÷ interval number
+   ↓
+running_mean
+```
+
+No Python loop is used for the production DataFrame/LazyFrame calculation.
+
+## 93.4 Compatibility wrapper
+
+Implemented:
+
+```python
+running_capping_speed(
+    closures_per_interval,
+    interval_seconds,
+)
+```
+
+The wrapper preserves the original list-based API while delegating the main
+calculation to the Polars production path.
+
+## 93.5 Scope decision
+
+Step 8 does **not** introduce new event-time interval grouping.
+
+The original Step 8 contract accepts closure counts per interval. Adding a new
+grouping definition here would change semantics rather than refactor the existing
+behavior.
+
+Any future interval construction from event timestamps must therefore be treated
+as a separate explicitly specified behavior.
+
+## 93.6 Performance interpretation
+
+Step 8 is now consistent with the Polars production architecture, but no claim is
+made that this step alone provides a major speedup.
+
+The largest known pre-refactor bottleneck was the raw telemetry row loop in closure
+detection. Performance claims remain blocked until the full real-data benchmark.
+
+---
+
+# 94. Step 8 Polars tests
+
+New tests cover:
+
+```text
+incremental-average parity                    ✅
+closures → pieces/hour                        ✅
+zero interval rejected                        ✅
+negative interval rejected                    ✅
+production frame remains lazy                 ✅
+vectorized instantaneous speeds               ✅
+vectorized running means                      ✅
+list-wrapper parity                           ✅
+empty input / invalid interval behavior       ✅
+```
+
+New Polars Step 8 suite:
+
+```text
+9 / 9 PASS
+```
+
+The final full-suite count observed after Step 8 is:
+
+```text
+134 / 134 PASS
+```
+
+The initially estimated total was 133, but the repository actually collected 134
+tests. The observed pytest collection/result is authoritative; no failure is
+present and no test was removed to force the estimate.
+
+---
+
+# 95. Current production-pipeline status
+
+```text
+Raw CSV
+   ↓
+CSV → Parquet conversion                    ✅
+   ↓
+Lazy Parquet loading                        ✅
+   ↓
+Polars validation                           ✅
+   ↓
+Vectorized Polars closure reconstruction    ✅
+   ↓
+Polars status/event assembly                ✅
+   ↓
+Polars capping-speed calculations           ✅
+   ↓
+Final Polars event table                    ⏭ NEXT
+   ↓
+Event Parquet                               ⏭ NEXT
+   ↓
+Benchmark old vs new                        ⏳
+   ↓
+Step 10 analytics                           BLOCKED until M2.5 complete
+```
+
+---
+
+# 96. Current milestone status
+
+```text
+M0 — Contract / shared interface
+    Original contract written                         ✅
+    Polars/Parquet architecture amendment written     ✅
+    Person B re-confirmation of changed shared
+    dataframe/tool boundary                           ⏳
+
+M1 — Data loads & validates
+    Original Step 4 loader                            ✅
+    Original Step 5 validation                        ✅
+
+M2 — Event table exists
+    Original Steps 6–9                                ✅
+
+M2.5 — Production performance refactor
+    Step 4 conversion + lazy loading                  ✅
+    Step 5 validation                                 ✅
+    Step 6 closure detection                          ✅
+    Step 7 event assembly                             ✅
+    Step 8 capping speed                              ✅
+    Step 9 final event table                          ⏭ NEXT
+    Event Parquet persistence                         ⏭ NEXT
+    Parity verification                               ⏳
+    Real-data benchmark                               ⏳
+
+M3 — Analytics
+    Steps 10–14                                       BLOCKED until M2.5
+
+M4 — Agent tools
+    Steps 15–17                                       ⏳
+
+M5 — Evaluation/docs
+    Steps 18–20                                       ⏳
+
+M6 — Integration
+    Steps 21–22                                       ⏳
+```
+
+---
+
+# 97. Current audit snapshot
+
+**Date:** 2026-09-11  
+**Python:** 3.12.14  
+**Polars:** 1.44.2  
+**Reference dataframe engine:** pandas 3.0.5  
+**Canonical production dataframe engine:** Polars  
+**Canonical target working format:** Parquet  
+**Original Steps 4–9:** COMPLETE  
+**Original behavioral baseline:** 70/70  
+**M2:** COMPLETE  
+**M2.5 Step 4:** COMPLETE  
+**M2.5 Step 5:** COMPLETE  
+**M2.5 Step 6:** COMPLETE  
+**M2.5 Step 7:** COMPLETE  
+**M2.5 Step 8:** COMPLETE  
+**Current full suite:** 134/134 PASS  
+**Benchmark:** NOT YET RUN  
+**Next implementation task:** Step 9 — final Polars event table and event-Parquet persistence.
+
+---
+
+# 98. Immediate next-step rule — Step 9
+
+Before changing the final event-table implementation:
+
+1. Inspect the existing reference `src/ingestion/event_table.py`.
+2. Inspect `tests/test_event_table.py`.
+3. Preserve automatic head detection semantics.
+4. Preserve no-hard-coded-36-head behavior.
+5. Preserve exact final event schema and deterministic ordering.
+6. Preserve same-timestamp events from different heads as distinct rows.
+7. Preserve empty-table schema behavior.
+8. Build the production table from the Polars Step 6 and Step 7 functions.
+9. Add event-Parquet persistence without introducing a second dataframe engine.
+10. Run parity tests and the complete project suite.
+11. After Step 9, proceed to the mandatory real-data benchmark before Step 10.
+12. Update this audit again at the Step 9 checkpoint.
