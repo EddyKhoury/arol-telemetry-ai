@@ -2,7 +2,7 @@
 
 **Project:** Agentic AI for Telemetry Analysis on AROL Capping Machines  
 **Role covered here:** Person A — data ingestion, validation, event-table preparation, and later deterministic analytics  
-**Current implementation status:** Steps 4–9 reference implementation complete (70/70 tests); M2.5 Polars/Parquet performance refactor in progress; Steps 4–5 refactor complete; current suite 94/94 passing; next: Step 6 vectorized closure detection  
+**Current implementation status:** Steps 4–9 reference implementation complete (70/70 tests); M2.5 Polars/Parquet performance refactor in progress; Steps 4–6 refactor complete; current suite 102/102 passing; next: Step 7 Polars status decoding and event assembly  
 **Primary source documents:** `docs/contract.md` and `docs/PERSON-A-WORKING-SPEC.md` (both amended after Step 9 for the Polars/Parquet production architecture)
 
 ---
@@ -107,7 +107,7 @@ The engineering rules for the refactor are:
 ```text
 Step 4  Polars/Parquet ingestion refactor   ✅ COMPLETE
 Step 5  Polars validation refactor          ✅ COMPLETE
-Step 6  Vectorized closure detection        ⏭ NEXT
+Step 6  Vectorized closure detection        ✅ COMPLETE
 Step 7  Vectorized event assembly           ⏳
 Step 8  Polars capping-speed path           ⏳
 Step 9  Polars final event table            ⏳
@@ -118,7 +118,7 @@ Step 10 analytics                           BLOCKED until M2.5 is complete
 Current full regression result:
 
 ```text
-94 / 94 tests passing
+102 / 102 tests passing
 ```
 
 No benchmark result has been recorded yet, so the audit makes no numerical speed
@@ -2876,8 +2876,8 @@ M2 — Event table exists
 M2.5 — Production performance refactor
     Step 4 conversion + lazy loading                  ✅
     Step 5 validation                                 ✅
-    Step 6 closure detection                          ⏭ NEXT
-    Step 7 event assembly                             ⏳
+    Step 6 closure detection                          ✅
+    Step 7 event assembly                             ⏭ NEXT
     Step 8 capping speed                              ⏳
     Step 9 final event table                          ⏳
     Parity verification                               ⏳
@@ -2911,9 +2911,10 @@ M6 — Integration
 **M2:** COMPLETE  
 **M2.5 Step 4:** COMPLETE  
 **M2.5 Step 5:** COMPLETE  
-**Current full suite:** 94/94 PASS  
+**M2.5 Step 6:** COMPLETE  
+**Current full suite:** 102/102 PASS  
 **Benchmark:** NOT YET RUN  
-**Next implementation task:** Step 6 — refactor closure detection to vectorized Polars expressions while preserving the established exact +1 closure semantics.
+**Next implementation task:** Step 7 — refactor status decoding and event assembly to Polars while preserving the established event/status semantics.
 
 ---
 
@@ -3238,7 +3239,7 @@ Lazy Parquet loading                        ✅
    ↓
 Polars validation                           ✅
    ↓
-Vectorized closure reconstruction           ⏭ NEXT
+Vectorized closure reconstruction           ✅
    ↓
 Polars status/event assembly                ⏳
    ↓
@@ -3274,8 +3275,8 @@ M2 — Event table exists
 M2.5 — Production performance refactor
     Step 4 conversion + lazy loading                  ✅
     Step 5 validation                                 ✅
-    Step 6 closure detection                          ⏭ NEXT
-    Step 7 event assembly                             ⏳
+    Step 6 closure detection                          ✅
+    Step 7 event assembly                             ⏭ NEXT
     Step 8 capping speed                              ⏳
     Step 9 final event table                          ⏳
     Parity verification                               ⏳
@@ -3309,25 +3310,345 @@ M6 — Integration
 **M2:** COMPLETE  
 **M2.5 Step 4:** COMPLETE  
 **M2.5 Step 5:** COMPLETE  
-**Current full suite:** 94/94 PASS  
+**Current full suite:** 102/102 PASS  
 **Benchmark:** NOT YET RUN  
 **Next implementation task:** Step 6 — vectorized closure detection in Polars.
 
 ---
 
-# 81. Immediate next-step rule — Step 6
+# 81. M2.5 — Step 6 vectorized closure detection
 
-Before modifying closure detection:
+**Status:** COMPLETE  
+**New Polars closure tests:** 8/8 passing  
+**Original pandas closure tests:** 7/7 passing  
+**Full project regression:** 102/102 passing
 
-1. Inspect the existing pandas `src/ingestion/closure_detection.py`.
-2. Inspect `tests/test_closure_detection.py`.
-3. Treat the existing Step 6 tests as the semantic contract.
-4. Preserve the established event rule exactly:
-   `current_count == previous_count + 1`.
-5. Preserve current-row timestamp, torque, and status semantics.
-6. Preserve file-boundary continuity.
-7. Do not create one Python iteration per telemetry row.
-8. Prefer Polars expressions based on `Count - Count.shift(1)`.
-9. Filtering for `delta == 1` must happen before collecting result rows.
-10. Run the complete regression suite before declaring Step 6 complete.
+The original pandas implementation remains untouched as the behavioral reference:
+
+```text
+src/ingestion/closure_detection.py
+tests/test_closure_detection.py
+```
+
+The optimized production implementation was added separately:
+
+```text
+src/ingestion/closure_detection_polars.py
+tests/test_closure_detection_polars.py
+```
+
+This preserves the known-good semantics while removing the Python row-by-row
+telemetry loop from the production path.
+
+## 81.1 Closure semantic rule
+
+The exact previously agreed rule remains unchanged:
+
+```text
+closure ⇔ current Count == previous Count + 1
+```
+
+Equivalent delta rule:
+
+```text
+current Count - previous Count == 1
+```
+
+Examples:
+
+```text
+100  -> 100     no closure
+100  -> 101     one closure
+100  -> 103     no closure
+1001 -> 5       reset/decrease; no closure
+```
+
+The first telemetry row cannot create a closure because there is no previous Count.
+
+## 81.2 Current-row event semantics
+
+When a closure is detected, the event attributes come from the **current row**,
+i.e. the row on which the exact +1 counter increment appears:
+
+```text
+row_index
+head_id
+torque      <- current row
+status      <- current row
+timestamp   <- current row
+```
+
+This is identical to the original reference behavior.
+
+## 81.3 Production function — lazy closure frame
+
+Implemented:
+
+```python
+detect_head_closures_frame(df, head_id)
+```
+
+Input:
+
+```text
+pl.DataFrame or pl.LazyFrame
+```
+
+Output:
+
+```text
+pl.LazyFrame
+```
+
+The function:
+
+1. normalizes input to LazyFrame;
+2. preserves original row position with a row index;
+3. computes the Count delta using `shift(1)`;
+4. filters for `delta == 1`;
+5. projects only event-relevant columns.
+
+Conceptually:
+
+```text
+Count
+  ↓
+Count.shift(1)
+  ↓
+current - previous
+  ↓
+filter delta == 1
+  ↓
+closure rows only
+```
+
+No Python iteration occurs over raw telemetry rows.
+
+## 81.4 Compatibility wrapper
+
+Implemented:
+
+```python
+detect_head_closures(df, head_id)
+```
+
+This wrapper:
+
+- calls the lazy production function;
+- collects only the already-filtered closure rows;
+- converts those closure rows into the same list-of-dictionaries shape used by
+  the original pandas implementation.
+
+Therefore the large raw dataset is processed inside Polars; Python only formats
+the much smaller set of detected closure events.
+
+## 81.5 Ordering decision
+
+The closure detector does **not** sort telemetry.
+
+This is intentional:
+
+- validation already reports out-of-order timestamps;
+- closure reconstruction must follow the supplied/stitched telemetry sequence;
+- silently sorting would mutate semantics and could hide upstream data-quality
+  problems.
+
+## 81.6 Stitched-file continuity
+
+Counters are continuous across daily files, so a closure can occur at a file
+boundary.
+
+Example:
+
+```text
+last row day 1    Count = 100
+first row day 2   Count = 101
+```
+
+The first row of day 2 must be detected as a closure.
+
+The Polars test suite explicitly verifies this behavior after vertically stitching
+two telemetry fragments into one continuous LazyFrame.
+
+---
+
+# 82. Step 6 Polars tests
+
+New tests in:
+
+```text
+tests/test_closure_detection_polars.py
+```
+
+1. `test_polars_closure_detection_stays_lazy`
+   - production frame function returns `pl.LazyFrame`
+
+2. `test_polars_steady_count_produces_zero_closures`
+   - unchanged Count produces no event
+
+3. `test_polars_increment_by_one_produces_one_closure`
+   - exact +1 produces one closure
+   - row index is correct
+   - head ID is correct
+   - current-row torque/status/timestamp are preserved
+
+4. `test_polars_first_row_does_not_create_a_closure`
+   - no previous Count means no event
+
+5. `test_polars_status_change_without_count_increment_produces_no_closure`
+   - status alone cannot create a closure
+
+6. `test_polars_count_jump_greater_than_one_produces_no_closure`
+   - jump > 1 is deliberately not reconstructed as a closure
+
+7. `test_polars_counter_reset_produces_no_spurious_closure`
+   - reset/decrease creates no false closure
+   - a preceding exact +1 event is still retained
+
+8. `test_polars_closure_across_stitched_file_boundary_is_detected`
+   - exact +1 across file boundary is retained
+   - event data comes from first row of the second file
+
+Result:
+
+```text
+8 / 8 PASS
+```
+
+Original pandas closure suite remains:
+
+```text
+7 / 7 PASS
+```
+
+---
+
+# 83. Regression count after Step 6
+
+Before Step 6:
+
+```text
+94 tests passing
+```
+
+New Step 6 Polars tests:
+
+```text
+8
+```
+
+Current complete project suite:
+
+```text
+102 / 102 PASS
+```
+
+The performance refactor therefore continues to preserve the established
+behavioral contract.
+
+---
+
+# 84. Current production-pipeline status
+
+```text
+Raw CSV
+   ↓
+CSV → Parquet conversion                    ✅
+   ↓
+Lazy Parquet loading                        ✅
+   ↓
+Polars validation                           ✅
+   ↓
+Vectorized Polars closure reconstruction    ✅
+   ↓
+Polars status/event assembly                ⏭ NEXT
+   ↓
+Polars capping-speed calculations           ⏳
+   ↓
+Final Polars event table                    ⏳
+   ↓
+Event Parquet                               ⏳
+   ↓
+Benchmark old vs new                        ⏳
+   ↓
+Step 10 analytics                           BLOCKED until M2.5 complete
+```
+
+---
+
+# 85. Current milestone status
+
+```text
+M0 — Contract / shared interface
+    Original contract written                         ✅
+    Polars/Parquet architecture amendment written     ✅
+    Person B re-confirmation of changed shared
+    dataframe/tool boundary                           ⏳
+
+M1 — Data loads & validates
+    Original Step 4 loader                            ✅
+    Original Step 5 validation                        ✅
+
+M2 — Event table exists
+    Original Steps 6–9                                ✅
+
+M2.5 — Production performance refactor
+    Step 4 conversion + lazy loading                  ✅
+    Step 5 validation                                 ✅
+    Step 6 closure detection                          ✅
+    Step 7 event assembly                             ⏭ NEXT
+    Step 8 capping speed                              ⏳
+    Step 9 final event table                          ⏳
+    Parity verification                               ⏳
+    Real-data benchmark                               ⏳
+
+M3 — Analytics
+    Steps 10–14                                       BLOCKED until M2.5
+
+M4 — Agent tools
+    Steps 15–17                                       ⏳
+
+M5 — Evaluation/docs
+    Steps 18–20                                       ⏳
+
+M6 — Integration
+    Steps 21–22                                       ⏳
+```
+
+---
+
+# 86. Current audit snapshot
+
+**Date:** 2026-09-11  
+**Python:** 3.12.14  
+**Polars:** 1.44.2  
+**Reference dataframe engine:** pandas 3.0.5  
+**Canonical production dataframe engine:** Polars  
+**Canonical target working format:** Parquet  
+**Original Steps 4–9:** COMPLETE  
+**Original behavioral baseline:** 70/70  
+**M2:** COMPLETE  
+**M2.5 Step 4:** COMPLETE  
+**M2.5 Step 5:** COMPLETE  
+**M2.5 Step 6:** COMPLETE  
+**Current full suite:** 102/102 PASS  
+**Benchmark:** NOT YET RUN  
+**Next implementation task:** Step 7 — Polars status decoding and event assembly.
+
+---
+
+# 87. Immediate next-step rule — Step 7
+
+Before modifying status decoding/event assembly:
+
+1. Inspect the existing pandas `src/ingestion/event_assembly.py`.
+2. Inspect `tests/test_event_assembly.py`.
+3. Treat the existing status map and event-schema tests as the semantic contract.
+4. Preserve the full known status-code mapping.
+5. Preserve unknown-code behavior exactly.
+6. Preserve nullable `reject_signal` and `cap_present` semantics.
+7. Preserve current event fields and types.
+8. Prefer Polars expressions/mapping over Python processing of every event row.
+9. Keep the original pandas implementation untouched until parity is proven.
+10. Run the full regression suite before declaring Step 7 complete.
 11. Update this audit again at the next checkpoint.
