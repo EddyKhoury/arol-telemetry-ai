@@ -2177,39 +2177,304 @@ Next: Step 9 — final clean all-head event table
 
 ---
 
-# 54. Step 9 preview
+# 54. Step 9 — Final clean all-head event table
 
-Step 9 should:
+**Status:** COMPLETE  
+**Step 9 tests:** 9/9 passed  
+**Full project suite after Step 9:** 70/70 passed  
+**Milestone M2:** COMPLETE  
+**Next step:** Step 10 — analytics layer
 
-- auto-detect available heads
-- run closure detection for each head
-- assemble exactly one event per closure
-- combine all events into one DataFrame
-- preserve chronological ordering
-- avoid duplicate events
-- return an empty DataFrame with the correct schema when there are no closures
+Step 9 combines all detected closures across all available heads into one deterministic, tidy event DataFrame for downstream analytics and agent tools.
 
-Target event fields:
+---
+
+# 55. `EVENT_COLUMNS`
+
+File:
 
 ```text
-ts
+src/ingestion/event_table.py
+```
+
+Final schema:
+
+```python
+EVENT_COLUMNS = [
+    "ts",
+    "machine_id",
+    "head_id",
+    "torque",
+    "status",
+    "error_class",
+    "reject_signal",
+    "cap_present",
+]
+```
+
+This keeps column order stable for both empty and non-empty outputs.
+
+---
+
+# 56. `detect_head_ids(df)`
+
+Heads are auto-detected from raw columns ending in:
+
+```text
+" Count"
+```
+
+Example:
+
+```text
+H01 Count
+H02 Count
+H03 Count
+```
+
+becomes:
+
+```python
+["H01", "H02", "H03"]
+```
+
+This avoids assuming exactly 36 heads.
+
+---
+
+# 57. `build_event_table(df, machine_id)`
+
+Core logic:
+
+```text
+detect all head IDs
+      ↓
+for each head:
+    detect closures
+      ↓
+for each closure:
+    assemble one event
+      ↓
+append all events
+      ↓
+build DataFrame with EVENT_COLUMNS
+      ↓
+sort by ts, then head_id
+      ↓
+reset index
+```
+
+Exactly one event row is emitted per detected closure.
+
+If there are no closures, the function still returns an empty DataFrame with the full event schema.
+
+---
+
+# 58. Deterministic ordering
+
+The event table is sorted by:
+
+```python
+["ts", "head_id"]
+```
+
+This guarantees chronological ordering and a deterministic tie-break for closures occurring at the same timestamp.
+
+Example:
+
+```text
+10:00:01 H01
+10:00:01 H02
+10:00:02 H01
+```
+
+Repeated runs on the same input produce the same DataFrame.
+
+---
+
+# 59. Same-timestamp closures
+
+Two different heads closing at the same timestamp remain two distinct event rows.
+
+Example:
+
+```text
+10:00:01 H01 closes
+10:00:01 H02 closes
+```
+
+Result:
+
+```text
+2 event rows
+```
+
+The implementation does not deduplicate by timestamp alone.
+
+---
+
+# 60. Final event-table data types
+
+The tests verify pandas dtypes appropriately:
+
+```text
+ts            -> datetime dtype
+torque        -> float dtype
+status        -> integer dtype
+reject_signal -> bool dtype
+cap_present   -> bool dtype
+```
+
+Text-valued columns are verified to contain strings:
+
+```text
 machine_id
 head_id
-torque
-status
 error_class
-reject_signal
-cap_present
+```
+
+The tests intentionally use pandas dtype checks because scalar values such as status may be represented as NumPy integer types such as `np.int64`.
+
+---
+
+# 61. Step 9 tests
+
+File:
+
+```text
+tests/test_event_table.py
+```
+
+Nine tests pass:
+
+1. `test_head_ids_are_auto_detected`
+2. `test_head_detection_does_not_assume_36_heads`
+3. `test_no_closures_returns_empty_event_table_with_schema`
+4. `test_one_closure_produces_one_event_row`
+5. `test_multiple_heads_produce_multiple_event_rows`
+6. `test_event_table_is_sorted_chronologically`
+7. `test_same_timestamp_different_heads_are_both_kept`
+8. `test_event_table_is_deterministic`
+9. `test_event_table_has_expected_types`
+
+---
+
+# 62. Step 9 audit result
+
+| Requirement | Status |
+|---|---|
+| Auto-detect heads | PASS |
+| No fixed 36-head assumption | PASS |
+| One row per closure | PASS |
+| Multi-head events combined | PASS |
+| Empty result preserves schema | PASS |
+| Chronological ordering | PASS |
+| Same-time events preserved | PASS |
+| Deterministic output | PASS |
+| Expected DataFrame dtypes | PASS |
+
+**Step 9: COMPLETE**
+
+---
+
+# 63. Full regression result after Step 9
+
+```text
+Closure detection:   7
+Event assembly:      19
+Loader:              12
+Validation:          16
+Capping speed:        7
+Event table:          9
+--------------------------------
+Total:               70 / 70 PASS
 ```
 
 ---
 
-# 55. Git checkpoint after Step 8
+# 64. Milestone M2 status
+
+```text
+M2 — Event table exists
+    Step 6 ✅ Closure detection
+    Step 7 ✅ Event assembly
+    Step 8 ✅ Timestamp + incremental capping speed
+    Step 9 ✅ Final clean all-head event table
+```
+
+**Milestone M2: COMPLETE**
+
+The pipeline now transforms raw wide telemetry into a stable event-level dataset suitable for analytics.
+
+---
+
+# 65. Current data pipeline
+
+```text
+config.yaml
+      ↓
+load_pool()
+      ↓
+RAW WIDE DATAFRAME
+      ↓
+validate_data()
+      ↓
+detect_head_ids()
+      ↓
+detect_head_closures() per head
+      ↓
+decode_status()
+      ↓
+assemble_event()
+      ↓
+build_event_table()
+      ↓
+FINAL CLEAN EVENT DATAFRAME
+```
+
+---
+
+# 66. Current project status
+
+```text
+M1 — Data loads & validates
+    Step 4 ✅
+    Step 5 ✅
+
+M2 — Event table exists
+    Step 6 ✅
+    Step 7 ✅
+    Step 8 ✅
+    Step 9 ✅
+
+M3 — Analytics complete
+    Steps 10–14 ❌
+
+M4 — Agent can use tools
+    Steps 15–17 ❌
+
+M5 — Proven & documented
+    Steps 18–20 ❌
+
+M6 — Integrated
+    Steps 21–22 ❌
+```
+
+Current position:
+
+```text
+Step 9 of 22 complete
+Next: Step 10
+```
+
+---
+
+# 67. Git checkpoint after Step 9
 
 ```bash
 git status
 git add .
-git commit -m "Implement incremental capping speed"
+git commit -m "Build final clean event table"
 git push
 ```
 
@@ -2227,7 +2492,7 @@ nothing to commit, working tree clean
 
 ---
 
-# 56. Audit snapshot after Step 8
+# 68. Audit snapshot after Step 9
 
 **Python:** 3.12.14  
 **Loader:** complete  
@@ -2235,11 +2500,13 @@ nothing to commit, working tree clean
 **Closure detection:** complete  
 **Event assembly:** complete  
 **Capping speed:** complete  
+**Final event table:** complete  
 **Loader tests:** 12/12 pass  
 **Validation tests:** 16/16 pass  
 **Closure tests:** 7/7 pass  
 **Event-assembly tests:** 19/19 pass  
 **Capping-speed tests:** 7/7 pass  
-**Total confirmed tests:** 61/61 pass  
-**Current milestone:** M2 in progress  
-**Next step:** Step 9 — final clean all-head event table
+**Event-table tests:** 9/9 pass  
+**Total confirmed tests:** 70/70 pass  
+**Milestone M2:** COMPLETE  
+**Next step:** Step 10 — analytics layer
