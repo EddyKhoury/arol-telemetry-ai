@@ -2,8 +2,8 @@
 
 **Project:** Agentic AI for Telemetry Analysis on AROL Capping Machines  
 **Role covered here:** Person A — data ingestion, validation, event-table preparation, and later deterministic analytics  
-**Current implementation status:** Step 4 complete; Step 5 implementation and tests complete; Step 6 not started  
-**Primary source documents:** `docs/contract.md` and `docs/PERSON-A-WORKING-SPEC.md`
+**Current implementation status:** Steps 4–9 reference implementation complete (70/70 tests); M2.5 Polars/Parquet performance refactor in progress; Steps 4–5 refactor complete; current suite 94/94 passing; next: Step 6 vectorized closure detection  
+**Primary source documents:** `docs/contract.md` and `docs/PERSON-A-WORKING-SPEC.md` (both amended after Step 9 for the Polars/Parquet production architecture)
 
 ---
 
@@ -22,6 +22,107 @@ The goal is to make it possible to come back later and answer:
 - What should **not** be changed accidentally?
 
 This document should be updated after every major step.
+
+---
+
+# CURRENT AUTHORITATIVE STATUS — 2026-09-11
+
+This section supersedes any older “current project status” snapshots later in this
+audit. Those older sections are intentionally retained as historical checkpoints.
+
+## Functional reference baseline
+
+The original implementation through Step 9 is complete and remains the behavioral
+reference:
+
+```text
+Step 4  Loader                 ✅
+Step 5  Validation             ✅
+Step 6  Closure detection      ✅
+Step 7  Event assembly         ✅
+Step 8  Capping speed          ✅
+Step 9  Final event table      ✅
+```
+
+Original regression baseline:
+
+```text
+70 / 70 tests passing
+```
+
+Milestone M2 (“event table exists”) was completed before the performance refactor
+began.
+
+## Architecture amendment after Step 9
+
+Before starting Step 10, the production data path was deliberately amended because
+the real AROL dataset is much larger than the small development sample.
+
+The target production architecture is:
+
+```text
+Raw AROL CSV
+    ↓
+one-time / incremental conversion
+    ↓
+Parquet
+    ↓
+Polars LazyFrame
+    ↓
+validation
+    ↓
+closure reconstruction
+    ↓
+status decoding / event assembly
+    ↓
+clean event data
+    ↓
+event Parquet
+    ↓
+Polars deterministic analytics
+    ↓
+JSON-safe tool result
+    ↓
+Person B agent/orchestration layer
+```
+
+The engineering rules for the refactor are:
+
+- Parquet is the canonical persisted working format.
+- Polars is the canonical production dataframe engine.
+- Lazy execution is preferred for large scans and transformations.
+- Pandas is temporarily retained only as the already-tested behavioral reference
+  and for later benchmark comparison.
+- PyArrow is retained as Parquet infrastructure/compatibility, not as a second
+  analytics engine.
+- DuckDB, Spark, Dask, and Modin are not added unless a measured requirement later
+  justifies them.
+- Repeated Polars → pandas → Polars conversions are forbidden.
+- The existing 70 tests are the behavioral regression contract.
+- No performance improvement will be claimed until it is measured on representative
+  AROL data.
+
+## Current M2.5 performance-refactor status
+
+```text
+Step 4  Polars/Parquet ingestion refactor   ✅ COMPLETE
+Step 5  Polars validation refactor          ✅ COMPLETE
+Step 6  Vectorized closure detection        ⏭ NEXT
+Step 7  Vectorized event assembly           ⏳
+Step 8  Polars capping-speed path           ⏳
+Step 9  Polars final event table            ⏳
+Benchmark old vs new                        ⏳
+Step 10 analytics                           BLOCKED until M2.5 is complete
+```
+
+Current full regression result:
+
+```text
+94 / 94 tests passing
+```
+
+No benchmark result has been recorded yet, so the audit makes no numerical speed
+or memory claim at this stage.
 
 ---
 
@@ -137,62 +238,59 @@ That protects the repository from accidentally storing the large real telemetry 
 
 # 4. Python environment
 
-The original macOS Python was:
-
-```text
-Python 3.9.6
-/usr/bin/python3
-```
-
-We deliberately did **not** build the project on that system Python.
-
-Homebrew was installed on Apple Silicon (`arm64`), and Python 3.12 was installed.
-
-The project now uses:
+The project uses Homebrew Python on Apple Silicon (`arm64`):
 
 ```text
 Python 3.12.14
 ```
 
-A virtual environment was created:
+The repository uses a project virtual environment:
 
 ```text
 .venv/
 ```
 
-and activated with:
+activated with:
 
 ```bash
 source .venv/bin/activate
 ```
 
-Installed packages:
-
-- `pandas`
-- `pyyaml`
-- `pytest`
-- `pyarrow`
-
-Their purpose:
-
-| Package | Purpose |
-|---|---|
-| `pandas` | DataFrames and CSV/JSON/Parquet loading |
-| `pyyaml` | Reading `config.yaml` |
-| `pytest` | Automated tests |
-| `pyarrow` | Parquet support |
-
-The environment dependencies are recorded in:
+At the current refactor checkpoint, `requirements.txt` is a frozen environment
+and includes, among other transitive dependencies:
 
 ```text
-requirements.txt
+pandas==3.0.5
+pyarrow==25.0.1
+polars==1.44.2
+polars-runtime-32==1.44.2
+pytest==9.1.1
+PyYAML==6.0.3
+numpy==2.5.2
 ```
+
+Current dependency roles:
+
+| Package | Current role |
+|---|---|
+| `polars` | New canonical production dataframe engine and lazy Parquet/CSV processing |
+| `pandas` | Temporary reference implementation for regression and later benchmarking |
+| `pyarrow` | Parquet infrastructure/compatibility |
+| `PyYAML` | Reading `config.yaml` |
+| `pytest` | Automated regression testing |
+| `numpy` | Existing dependency used by the environment/reference stack |
+
+`polars-runtime-32` is installed automatically as the runtime dependency for the
+installed Polars build on this machine.
+
+Pandas must **not** be removed until the Steps 4–9 refactor and the benchmark
+comparison are complete.
 
 ---
 
 # 5. Configuration
 
-Current configuration structure:
+Current configuration structure after the architecture amendment:
 
 ```yaml
 data:
@@ -200,11 +298,35 @@ data:
     sample:
       - data/sample.csv
 
+  canonical_format: parquet
+  parquet_root: data/parquet
+  event_parquet_root: data/events
+
   n_heads: null
 
   units:
     AppTorque: Nm
+
+processing:
+  engine: polars
+  lazy: true
 ```
+
+The existing `pools.sample` entry is intentionally retained while the refactor is
+in progress so the original CSV ingestion path and its tests continue to work.
+
+The new keys document the production direction:
+
+- `canonical_format: parquet` — canonical persisted telemetry format
+- `parquet_root` — location for converted telemetry Parquet files
+- `event_parquet_root` — location for persisted event-level Parquet data
+- `processing.engine: polars` — canonical production dataframe engine
+- `processing.lazy: true` — prefer lazy scans/transforms where appropriate
+
+At this checkpoint the new conversion code writes one Parquet file per input CSV
+into an output directory. Machine/date partitioning described in the amended
+architecture has **not yet been implemented** and remains an explicit migration
+item rather than something this audit silently claims is finished.
 
 ## Why configuration exists
 
@@ -257,11 +379,13 @@ It should be documented clearly because it is not explicitly defined in the orig
 
 ---
 
-# 6. Step 4 — Loader
+# 6. Step 4 — Original reference loader
 
-**Status:** COMPLETE  
-**Tests:** 12/12 passed  
+**Reference status:** COMPLETE  
+**Original tests:** 12/12 passed  
 **Milestone contribution:** M1 — data loads
+
+This section documents the original pandas-based loader that established the behavioral baseline. It remains temporarily available while the production path is migrated to Polars/Parquet.
 
 The Step 4 loader is responsible only for loading raw telemetry.
 
@@ -750,7 +874,7 @@ The 12 tests cover:
 
 ---
 
-# 15. Step 5 — Validation
+# 15. Step 5 — Original reference validation
 
 **Status:** implementation complete  
 **Tests:** 16/16 passed  
@@ -1151,7 +1275,9 @@ Coverage:
 | Clean data returns valid report | PASS |
 | Injected errors detected by tests | PASS |
 
-**Step 5 implementation and audit tests: COMPLETE**
+**Step 5 reference implementation and audit tests: COMPLETE**
+
+The validation semantics are locked by these tests. The production implementation has not yet been refactored to Polars at the current checkpoint.
 
 This reaches:
 
@@ -1161,7 +1287,7 @@ M1 — Data loads & validates
 
 ---
 
-# 26. Current project status
+# 26. Historical project status after Step 5
 
 ```text
 M0 — Contract locked
@@ -1851,7 +1977,7 @@ This proves the Step 7 changes did not regress Steps 4–6.
 
 ---
 
-# 42. Updated project status
+# 42. Historical project status after Step 7
 
 ```text
 M0 — Contract
@@ -2154,7 +2280,7 @@ Total:               61 / 61 PASS
 
 ---
 
-# 53. Current project status
+# 53. Historical project status after Step 8
 
 ```text
 M1 — Data loads & validates
@@ -2408,12 +2534,14 @@ The pipeline now transforms raw wide telemetry into a stable event-level dataset
 
 ---
 
-# 65. Current data pipeline
+# 65. Reference pipeline completed at Step 9
+
+The original behaviorally validated pipeline is:
 
 ```text
 config.yaml
       ↓
-load_pool()
+load_pool()                         [pandas reference]
       ↓
 RAW WIDE DATAFRAME
       ↓
@@ -2432,81 +2560,774 @@ build_event_table()
 FINAL CLEAN EVENT DATAFRAME
 ```
 
+This pipeline is retained as the correctness reference during M2.5.
+
 ---
 
-# 66. Current project status
+# 66. Production pipeline being migrated
+
+The amended production direction is:
 
 ```text
+raw CSV
+   ↓
+convert_csv_to_parquet()
+   ↓
+Parquet files
+   ↓
+scan_parquet_file() / scan_parquet_pool()
+   ↓
+Polars LazyFrame
+   ↓
+Step 5 validation refactor
+   ↓
+Step 6 vectorized closure reconstruction
+   ↓
+Step 7 event assembly
+   ↓
+Step 8 capping-speed calculations
+   ↓
+Step 9 final Polars event table
+   ↓
+event Parquet
+```
+
+Only the Step 4 portion of this production path is complete at the current
+checkpoint.
+
+---
+
+# 67. Architecture amendment — rationale and constraints
+
+The architecture was amended after Step 9 because the real project dataset is much
+larger than the small sample used during initial correctness development.
+
+The refactor is intentionally conservative:
+
+1. Preserve behavior first.
+2. Change one pipeline layer at a time.
+3. Run regression tests after each change.
+4. Keep the old reference implementation available until parity is proven.
+5. Benchmark only after the complete Steps 4–9 production path exists.
+6. Remove pandas only if the final code and integration no longer require it.
+
+The project deliberately avoids stacking multiple dataframe/query engines without
+evidence. Polars is the single intended production processing engine.
+
+---
+
+# 68. M2.5 — Step 4 Polars/Parquet ingestion refactor
+
+**Status:** COMPLETE for the currently defined conversion and lazy-loading layer.  
+**Regression result at completion:** 78/78 passing.
+
+## 68.1 New file — `src/ingestion/conversion.py`
+
+The conversion layer was added so CSV remains the source format while Parquet
+becomes the repeated working format.
+
+### `convert_csv_to_parquet(csv_path, parquet_path)`
+
+Purpose:
+
+- accepts one raw CSV path
+- creates the destination directory when necessary
+- scans the CSV with Polars
+- parses `timestamp` once into a real Polars datetime
+- writes the result to Parquet
+
+Production implementation uses the lazy Polars path conceptually:
+
+```python
+pl.scan_csv(...)
+    .with_columns(...)
+    .sink_parquet(...)
+```
+
+The timestamp parsing rule currently used by the tested sample is:
+
+```text
+%Y-%m-%d %H:%M:%S
+```
+
+The timestamp remains timezone-naive. No UTC timezone is invented.
+
+### `convert_csv_pool_to_parquet(csv_paths, output_dir)`
+
+Purpose:
+
+- accepts multiple source CSV files
+- converts each file using `convert_csv_to_parquet()`
+- preserves one output file per input file
+- names each output using the input stem plus `.parquet`
+- returns the generated Parquet paths in input order
+
+The small Python loop here is over **files**, not over telemetry rows, and therefore
+does not violate the vectorization requirement for large telemetry processing.
+
+The function reuses the single-file converter instead of duplicating parsing logic.
+
+---
+
+# 69. M2.5 — Step 4 lazy Parquet loading
+
+The existing pandas loader remains for behavioral regression, while the new
+production-oriented lazy functions were added to `src/ingestion/loader.py`.
+
+## `scan_parquet_file(file_path)`
+
+Behavior:
+
+- normalizes the input with `Path`
+- checks that the file exists
+- raises a clear `FileNotFoundError` when missing
+- returns `pl.scan_parquet(...)`
+- therefore returns a `polars.LazyFrame` instead of eagerly materializing all rows
+
+## `scan_parquet_pool(file_paths)`
+
+Behavior:
+
+- accepts multiple Parquet paths
+- rejects an empty pool
+- validates that every configured path exists
+- creates one lazy scan per file
+- combines them with vertical Polars concatenation
+- preserves the supplied file order
+- returns one `polars.LazyFrame`
+
+Configured file order is important because the AROL counters continue across
+day-file boundaries. Later closure reconstruction must therefore be able to see:
+
+```text
+last row of day N
+        ↓
+first row of day N+1
+```
+
+as one continuous sequence.
+
+`how="vertical"` is intentionally used instead of silently relaxing incompatible
+schemas. Daily files are expected to share the same telemetry schema; a schema
+change should be visible rather than hidden.
+
+---
+
+# 70. New Step 4 performance-refactor tests
+
+File:
+
+```text
+tests/test_conversion.py
+```
+
+New conversion tests:
+
+1. `test_csv_is_converted_to_parquet`
+   - output Parquet exists
+   - row count is preserved
+   - column names are preserved
+
+2. `test_parquet_timestamp_is_datetime`
+   - converted `timestamp` is stored as `pl.Datetime("us")`
+
+3. `test_parquet_preserves_numeric_column_types`
+   - Count remains integer
+   - AppTorque remains floating-point
+   - Status remains integer
+
+4. `test_multiple_csv_files_are_converted_to_parquet`
+   - multiple CSV files convert successfully
+   - output paths preserve input order
+   - output names use the original file stems
+
+Additional loader tests in:
+
+```text
+tests/test_loader.py
+```
+
+5. `test_parquet_is_loaded_lazily`
+   - one Parquet file returns `pl.LazyFrame`
+
+6. `test_multiple_parquet_files_load_as_one_lazy_pool`
+   - multiple files become one lazy dataset
+   - row order follows supplied file order
+
+7. `test_empty_parquet_pool_has_clear_error`
+   - empty pool fails explicitly
+
+8. `test_missing_parquet_file_has_clear_error`
+   - missing file fails explicitly
+
+---
+
+# 71. Regression count after the Step 4 performance refactor
+
+Original Step 9 baseline:
+
+```text
+70 tests
+```
+
+New Step 4 refactor tests:
+
+```text
+Conversion:        4
+Lazy loader:       4
+--------------------
+New tests:         8
+```
+
+Current complete suite:
+
+```text
+78 / 78 PASS
+```
+
+This is important because the performance work has so far been additive and has
+not broken the original behavioral reference.
+
+---
+
+# 72. Current configuration and storage status
+
+Implemented now:
+
+```text
+CSV source                                    ✅
+Parquet conversion                            ✅
+Timestamp parsed during conversion            ✅
+Numeric telemetry dtypes preserved            ✅
+Multiple CSV → multiple Parquet conversion    ✅
+Single-file lazy Parquet scan                  ✅
+Multi-file lazy Parquet pool                   ✅
+Explicit missing/empty pool errors             ✅
+Polars configured as target engine             ✅
+```
+
+Not yet implemented:
+
+```text
+Polars Step 5 validation                       ✅
+Vectorized Step 6 closure detection            ⏳
+Polars Step 7 event assembly                   ⏳
+Polars Step 8 capping-speed path               ⏳
+Polars Step 9 final event table                ⏳
+Event-table Parquet persistence                ⏳
+Machine/date Parquet partitioning              ⏳
+Representative real-data benchmark             ⏳
+Measured runtime comparison                     ⏳
+Measured memory comparison                      ⏳
+Removal of temporary pandas dependency          ⏳
+```
+
+---
+
+# 73. Performance claims policy
+
+At this checkpoint:
+
+- Polars/Parquet has been introduced for architectural scalability.
+- The new code is lazy where tested.
+- No project-specific speedup percentage has been measured.
+- No project-specific memory reduction has been measured.
+
+Therefore the project must **not** currently claim:
+
+```text
+“X times faster”
+“Y% less memory”
+“handles the full dataset in Z seconds”
+```
+
+Those claims become valid only after the benchmark gate is completed on
+representative AROL data.
+
+The future comparison must include, at minimum:
+
+```text
+reference pandas + CSV
+Polars + CSV
+Polars + Parquet
+```
+
+and should record input size, relevant phase times, total runtime, and peak memory
+when practical.
+
+---
+
+# 74. Current milestone status
+
+```text
+M0 — Contract / shared interface
+    Original contract written                         ✅
+    Polars/Parquet architecture amendment written     ✅
+    Person B re-confirmation of changed shared
+    dataframe/tool boundary                           ⏳
+
 M1 — Data loads & validates
-    Step 4 ✅
-    Step 5 ✅
+    Original Step 4 loader                            ✅
+    Original Step 5 validation                        ✅
 
 M2 — Event table exists
-    Step 6 ✅
-    Step 7 ✅
-    Step 8 ✅
-    Step 9 ✅
+    Original Steps 6–9                                ✅
 
-M3 — Analytics complete
-    Steps 10–14 ❌
+M2.5 — Production performance refactor
+    Step 4 conversion + lazy loading                  ✅
+    Step 5 validation                                 ✅
+    Step 6 closure detection                          ⏭ NEXT
+    Step 7 event assembly                             ⏳
+    Step 8 capping speed                              ⏳
+    Step 9 final event table                          ⏳
+    Parity verification                               ⏳
+    Real-data benchmark                               ⏳
 
-M4 — Agent can use tools
-    Steps 15–17 ❌
+M3 — Analytics
+    Steps 10–14                                       BLOCKED until M2.5
 
-M5 — Proven & documented
-    Steps 18–20 ❌
+M4 — Agent tools
+    Steps 15–17                                       ⏳
 
-M6 — Integrated
-    Steps 21–22 ❌
-```
+M5 — Evaluation/docs
+    Steps 18–20                                       ⏳
 
-Current position:
-
-```text
-Step 9 of 22 complete
-Next: Step 10
-```
-
----
-
-# 67. Git checkpoint after Step 9
-
-```bash
-git status
-git add .
-git commit -m "Build final clean event table"
-git push
-```
-
-Then verify:
-
-```bash
-git status
-```
-
-Expected:
-
-```text
-nothing to commit, working tree clean
+M6 — Integration
+    Steps 21–22                                       ⏳
 ```
 
 ---
 
-# 68. Audit snapshot after Step 9
+# 75. Current audit snapshot
 
+**Date:** 2026-09-11  
 **Python:** 3.12.14  
-**Loader:** complete  
-**Validation:** complete  
-**Closure detection:** complete  
-**Event assembly:** complete  
-**Capping speed:** complete  
-**Final event table:** complete  
-**Loader tests:** 12/12 pass  
-**Validation tests:** 16/16 pass  
-**Closure tests:** 7/7 pass  
-**Event-assembly tests:** 19/19 pass  
-**Capping-speed tests:** 7/7 pass  
-**Event-table tests:** 9/9 pass  
-**Total confirmed tests:** 70/70 pass  
-**Milestone M2:** COMPLETE  
-**Next step:** Step 10 — analytics layer
+**Polars:** 1.44.2  
+**Reference dataframe engine:** pandas 3.0.5  
+**Canonical target engine:** Polars  
+**Canonical target working format:** Parquet  
+**Original Steps 4–9:** COMPLETE  
+**Original behavioral baseline:** 70/70  
+**M2:** COMPLETE  
+**M2.5 Step 4:** COMPLETE  
+**M2.5 Step 5:** COMPLETE  
+**Current full suite:** 94/94 PASS  
+**Benchmark:** NOT YET RUN  
+**Next implementation task:** Step 6 — refactor closure detection to vectorized Polars expressions while preserving the established exact +1 closure semantics.
+
+---
+
+# 76. M2.5 — Step 5 Polars validation refactor
+
+**Status:** COMPLETE  
+**Polars validation tests:** 16/16 passing  
+**Full project regression:** 94/94 passing
+
+The original pandas validation implementation remains untouched as the behavioral
+reference. A separate production-oriented module was added:
+
+```text
+src/ingestion/validation_polars.py
+```
+
+with its own parity-oriented test file:
+
+```text
+tests/test_validation_polars.py
+```
+
+This separation preserves the known-good reference semantics while allowing the
+production path to migrate to Polars incrementally.
+
+## 76.1 Input contract
+
+Every Polars validator accepts either:
+
+```text
+pl.DataFrame
+pl.LazyFrame
+```
+
+A small internal helper normalizes supported input to a LazyFrame.
+
+The production pipeline therefore remains compatible with the lazy Parquet loader
+introduced in Step 4.
+
+## 76.2 Missing-value validation
+
+Implemented:
+
+```python
+check_missing_values(df)
+```
+
+Behavior preserved from the pandas reference:
+
+- returns `{}` when there are no missing values
+- returns `{column_name: count}` only for affected columns
+- null values are treated as missing
+- floating-point NaN values are also treated as missing to preserve pandas
+  `isna()` behavior
+
+Performance behavior:
+
+- missing counts are expressed as Polars aggregations
+- only the aggregated one-row result is collected
+- the full telemetry table is not materialized simply to count missing cells
+
+Tests:
+
+```text
+clean data has no missing values            ✅
+missing value is detected                   ✅
+```
+
+## 76.3 Duplicate-timestamp validation
+
+Implemented:
+
+```python
+check_duplicate_timestamps(df)
+```
+
+Reference semantics preserved:
+
+- first occurrence of a timestamp is valid
+- later repetitions are duplicates
+- the report contains duplicate count plus duplicate timestamps
+- missing timestamp column produces the same explicit error semantics
+
+The Polars implementation uses distinctness logic equivalent to pandas
+`duplicated(keep="first")`.
+
+Tests:
+
+```text
+clean data has no duplicate timestamps      ✅
+duplicate timestamp is detected             ✅
+```
+
+## 76.4 Out-of-order timestamp validation
+
+Implemented:
+
+```python
+check_out_of_order_timestamps(df)
+```
+
+Rule preserved:
+
+```text
+current timestamp < previous timestamp
+    => out-of-order row
+```
+
+The implementation:
+
+- verifies the timestamp column exists
+- verifies it is a Polars Datetime column
+- adds an original row index before filtering
+- uses `shift(1)` to access the previous timestamp
+- collects only detected problem rows
+
+Report structure remains:
+
+```text
+count
+rows:
+  row_index
+  previous_timestamp
+  current_timestamp
+```
+
+Tests:
+
+```text
+clean data is in timestamp order            ✅
+out-of-order timestamp is detected          ✅
+```
+
+## 76.5 Timestamp-gap validation
+
+Implemented:
+
+```python
+check_timestamp_gaps(df)
+```
+
+Rule preserved exactly:
+
+```text
+expected sampling interval = 1 second
+gap exists only when interval > 1 second
+```
+
+The implementation uses Polars datetime-duration expressions and only collects
+rows that violate the expected interval.
+
+Report structure remains:
+
+```text
+count
+rows:
+  row_index
+  previous_timestamp
+  current_timestamp
+  gap_seconds
+```
+
+Tests:
+
+```text
+clean data has no timestamp gaps            ✅
+five-second gap is detected                 ✅
+```
+
+## 76.6 Dtype/value-type validation
+
+Implemented:
+
+```python
+check_dtypes(df)
+```
+
+Reference rules preserved:
+
+```text
+timestamp
+    must be Datetime
+
+* Count
+    must be numeric
+    must contain integer-like values
+
+* Status
+    must be numeric
+    must contain integer-like values
+
+* AppTorque
+    must be numeric
+```
+
+Examples:
+
+```text
+104085      valid Count
+104085.0    valid Count
+104085.5    invalid Count
+
+2           valid Status
+2.0         valid Status
+2.5         invalid Status
+```
+
+Missing values are not treated as dtype issues because they are already handled by
+the dedicated missing-value validator.
+
+For Count and Status columns, integer-like checks are accumulated and evaluated
+together rather than forcing one complete dataset scan per telemetry column.
+
+Tests:
+
+```text
+clean dtypes are valid                       ✅
+bad Count value is detected                  ✅
+bad Status value is detected                 ✅
+bad AppTorque dtype is detected              ✅
+```
+
+One test-data-specific adjustment was required because Polars constructs a strict
+typed Series. To test a non-integer numeric Count such as `100.5`, the test first
+constructs the Count column as floating-point numeric values, then injects the
+non-integer value. This is a test-fixture correction, not a validation semantic
+change.
+
+## 76.7 Units metadata validation
+
+Implemented:
+
+```python
+check_units_metadata(config)
+```
+
+This logic is dataframe-engine independent and preserves the existing project
+convention:
+
+```text
+AppTorque -> Nm
+```
+
+Tests:
+
+```text
+valid units metadata                         ✅
+missing units metadata is detected           ✅
+```
+
+## 76.8 Complete validation report
+
+Implemented:
+
+```python
+validate_data(df, config)
+```
+
+The report shape remains compatible with the original implementation:
+
+```text
+valid
+missing_values
+timestamps:
+  duplicates
+  out_of_order
+  gaps
+dtypes:
+  issues
+units:
+  valid
+  issues
+```
+
+`valid` becomes false when any validation category reports an issue or a required
+timestamp validation precondition fails.
+
+The validator does not repair, sort, drop, or otherwise mutate telemetry data.
+
+Tests:
+
+```text
+clean full validation report                 ✅
+multiple simultaneous problems reported      ✅
+```
+
+---
+
+# 77. Step 5 regression result
+
+Before the Step 5 Polars parity suite:
+
+```text
+78 tests passing
+```
+
+New Step 5 Polars tests:
+
+```text
+16
+```
+
+Current full project suite:
+
+```text
+94 / 94 PASS
+```
+
+The original pandas validation tests still pass, and the new Polars validation
+suite passes independently.
+
+---
+
+# 78. Current production-pipeline status
+
+```text
+Raw CSV
+   ↓
+CSV → Parquet conversion                    ✅
+   ↓
+Lazy Parquet loading                        ✅
+   ↓
+Polars validation                           ✅
+   ↓
+Vectorized closure reconstruction           ⏭ NEXT
+   ↓
+Polars status/event assembly                ⏳
+   ↓
+Polars capping-speed calculations           ⏳
+   ↓
+Final Polars event table                    ⏳
+   ↓
+Event Parquet                               ⏳
+   ↓
+Benchmark old vs new                        ⏳
+   ↓
+Step 10 analytics                           BLOCKED until M2.5 complete
+```
+
+---
+
+# 79. Current milestone status
+
+```text
+M0 — Contract / shared interface
+    Original contract written                         ✅
+    Polars/Parquet architecture amendment written     ✅
+    Person B re-confirmation of changed shared
+    dataframe/tool boundary                           ⏳
+
+M1 — Data loads & validates
+    Original Step 4 loader                            ✅
+    Original Step 5 validation                        ✅
+
+M2 — Event table exists
+    Original Steps 6–9                                ✅
+
+M2.5 — Production performance refactor
+    Step 4 conversion + lazy loading                  ✅
+    Step 5 validation                                 ✅
+    Step 6 closure detection                          ⏭ NEXT
+    Step 7 event assembly                             ⏳
+    Step 8 capping speed                              ⏳
+    Step 9 final event table                          ⏳
+    Parity verification                               ⏳
+    Real-data benchmark                               ⏳
+
+M3 — Analytics
+    Steps 10–14                                       BLOCKED until M2.5
+
+M4 — Agent tools
+    Steps 15–17                                       ⏳
+
+M5 — Evaluation/docs
+    Steps 18–20                                       ⏳
+
+M6 — Integration
+    Steps 21–22                                       ⏳
+```
+
+---
+
+# 80. Current audit snapshot
+
+**Date:** 2026-09-11  
+**Python:** 3.12.14  
+**Polars:** 1.44.2  
+**Reference dataframe engine:** pandas 3.0.5  
+**Canonical production dataframe engine:** Polars  
+**Canonical target working format:** Parquet  
+**Original Steps 4–9:** COMPLETE  
+**Original behavioral baseline:** 70/70  
+**M2:** COMPLETE  
+**M2.5 Step 4:** COMPLETE  
+**M2.5 Step 5:** COMPLETE  
+**Current full suite:** 94/94 PASS  
+**Benchmark:** NOT YET RUN  
+**Next implementation task:** Step 6 — vectorized closure detection in Polars.
+
+---
+
+# 81. Immediate next-step rule — Step 6
+
+Before modifying closure detection:
+
+1. Inspect the existing pandas `src/ingestion/closure_detection.py`.
+2. Inspect `tests/test_closure_detection.py`.
+3. Treat the existing Step 6 tests as the semantic contract.
+4. Preserve the established event rule exactly:
+   `current_count == previous_count + 1`.
+5. Preserve current-row timestamp, torque, and status semantics.
+6. Preserve file-boundary continuity.
+7. Do not create one Python iteration per telemetry row.
+8. Prefer Polars expressions based on `Count - Count.shift(1)`.
+9. Filtering for `delta == 1` must happen before collecting result rows.
+10. Run the complete regression suite before declaring Step 6 complete.
+11. Update this audit again at the next checkpoint.
