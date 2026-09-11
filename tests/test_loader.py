@@ -1,7 +1,9 @@
 import pandas as pd
 import pytest
 import yaml
+import polars as pl
 
+from src.ingestion.loader import scan_parquet_file
 from src.ingestion.loader import (
     LoaderError,
     load_config,
@@ -319,3 +321,36 @@ def test_multiple_files_are_stitched_in_order(tmp_path):
     )
 
     assert df.iloc[0]["timestamp"] == expected_first_timestamp
+
+def test_parquet_is_loaded_lazily(tmp_path):
+    parquet_path = tmp_path / "telemetry.parquet"
+
+    df = pl.DataFrame({
+        "timestamp": [
+            "2026-02-01 10:00:00",
+            "2026-02-01 10:00:01",
+        ],
+        "H01 Count": [
+            100,
+            101,
+        ],
+        "H01 AppTorque": [
+            0.0,
+            2.05,
+        ],
+        "H01 Status": [
+            0,
+            65,
+        ],
+    }).with_columns(
+        pl.col("timestamp").str.strptime(
+            pl.Datetime,
+            format="%Y-%m-%d %H:%M:%S",
+        )
+    )
+
+    df.write_parquet(parquet_path)
+
+    lazy_df = scan_parquet_file(parquet_path)
+
+    assert isinstance(lazy_df, pl.LazyFrame)

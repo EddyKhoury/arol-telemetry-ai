@@ -3,7 +3,19 @@ data:
     sample:
       - data/sample.csv
 
+  canonical_format: parquet
+
+  parquet_root: data/parquet
+
+  event_parquet_root: data/events
+
   n_heads: null
 
   units:
     AppTorque: Nm
+
+
+processing:
+  engine: polars
+
+  lazy: true

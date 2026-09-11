@@ -351,3 +351,16 @@ if __name__ == "__main__":
         # Instead of showing a giant traceback for expected loader problems,
         # display our clear LoaderError message.
         print(f"Loader error: {exc}")
+
+from pathlib import Path
+
+import polars as pl
+
+
+def scan_parquet_file(file_path):
+    file_path = Path(file_path)
+
+    if not file_path.exists():
+        raise FileNotFoundError(f"Parquet file not found: {file_path}")
+
+    return pl.scan_parquet(file_path)
