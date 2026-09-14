@@ -7,7 +7,7 @@ halves of the project fit together.
 
 import json
 
-import pandas as pd
+import polars as pl
 import pytest
 
 from src.common import registry as R
@@ -47,12 +47,12 @@ def test_unknown_codes_degrade_instead_of_crashing():
 
 def test_vectorised_decode_matches_scalar():
     codes = [0, 2, 65, 3, 4, 17, 255]
-    frame = schema.decode_status_series(pd.Series(codes))
+    frame = schema.decode_status_series(pl.Series(codes))
     for i, code in enumerate(codes):
         scalar = schema.decode_status(code)
-        assert frame["error_class"].iloc[i] == scalar["error_class"]
-        assert bool(frame["reject_signal"].iloc[i]) == scalar["reject_signal"]
-        assert bool(frame["cap_present"].iloc[i]) == scalar["cap_present"]
+        assert frame["error_class"][i] == scalar["error_class"]
+        assert bool(frame["reject_signal"][i]) == scalar["reject_signal"]
+        assert bool(frame["cap_present"][i]) == scalar["cap_present"]
 
 
 # --- the event table ------------------------------------------------------
@@ -66,22 +66,20 @@ def test_synthetic_events_conform(events):
 
 
 def test_validate_rejects_a_missing_column(events):
-    broken = events.drop(columns=["torque"])
+    broken = events.drop("torque")
     with pytest.raises(schema.SchemaError, match="missing columns"):
         schema.validate_events(broken)
 
 
 def test_validate_rejects_a_wrong_dtype(events):
-    broken = events.copy()
-    broken["status"] = broken["status"].astype("int64")
+    broken = events.with_columns(pl.col("status").cast(pl.Int64))
     problems = schema.validate_events(broken, strict=False)
     assert any("status" in p for p in problems)
 
 
 def test_validate_rejects_tz_aware_timestamps(events):
     """Audit F5: a UTC shift would move closures across midnight."""
-    broken = events.copy()
-    broken["ts"] = broken["ts"].dt.tz_localize("UTC")
+    broken = events.with_columns(pl.col("ts").dt.replace_time_zone("UTC"))
     problems = schema.validate_events(broken, strict=False)
     assert any("timezone-aware" in p or "ts" in p for p in problems)
 
@@ -94,17 +92,19 @@ def test_envelope_always_has_all_four_keys():
         assert "n" in result["meta"]
 
 
-def test_envelope_is_json_serialisable_with_numpy_types():
+def test_envelope_is_json_serialisable_with_engine_types():
     import numpy as np
     result = envelope({"rate": np.float64(0.5), "n": np.int64(3),
-                       "flag": np.bool_(True), "nan": np.float64("nan")}, n=3)
+                       "flag": bool(np.bool_(True)), "nan": float("nan"),
+                       "series": pl.Series([1, 2, 3])}, n=3)
     text = json.dumps(result)          # must not raise
     assert json.loads(text)["result"]["rate"] == 0.5
     assert json.loads(text)["result"]["nan"] is None
 
 
 def test_jsonable_handles_timestamps():
-    assert jsonable(pd.Timestamp("2026-02-01")) == "2026-02-01T00:00:00"
+    from datetime import datetime
+    assert jsonable(datetime(2026, 2, 1)) == "2026-02-01T00:00:00"
 
 
 # --- the registry (audit F3, F4) ------------------------------------------

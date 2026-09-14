@@ -3,9 +3,14 @@
 The denominator test is the important one. contract.pdf's OPEN item 1 asked
 whether No Load cycles belong in the denominator; these tests pin the agreed
 answer down in code so it cannot drift later without a test failing.
+
+On the real machine the two denominators differ by 44 percentage points, so
+this is not a hypothetical.
 """
 
-import pandas as pd
+from datetime import datetime, timedelta
+
+import polars as pl
 import pytest
 
 from src.analytics import kpi
@@ -15,22 +20,21 @@ from src.common import schema
 
 def _frame(statuses, head="H01", start="2026-02-01 00:00:00", step_s=6):
     """Build a tiny conforming event table from a list of status codes."""
-    ts = pd.date_range(start, periods=len(statuses), freq=f"{step_s}s")
-    decoded = schema.decode_status_series(pd.Series(statuses))
-    return schema.conform(pd.DataFrame({
-        "ts": ts,
-        "pool_id": "test",
-        "machine_id": "M1",
-        "head_id": head,
-        "head_index": 1,
-        "torque": 2.0,
-        "status": statuses,
-        "error_class": decoded["error_class"].to_numpy(),
-        "reject_signal": decoded["reject_signal"].to_numpy(),
-        "cap_present": decoded["cap_present"].to_numpy(),
-        "count_delta": 1,
-        "inferred": False,
-    }))
+    t0 = datetime.fromisoformat(start.replace(" ", "T"))
+    n = len(statuses)
+    frame = pl.DataFrame({
+        "ts": [t0 + timedelta(seconds=i * step_s) for i in range(n)],
+        "pool_id": pl.Series(["test"] * n, dtype=pl.String),
+        "machine_id": pl.Series(["M1"] * n, dtype=pl.String),
+        "head_id": pl.Series([head] * n, dtype=pl.String),
+        "head_index": pl.Series([1] * n, dtype=pl.Int16),
+        "torque": pl.Series([2.0] * n, dtype=pl.Float64),
+        "status": pl.Series(statuses, dtype=pl.Int16),
+        "count_delta": pl.Series([1] * n, dtype=pl.Int32),
+        "inferred": pl.Series([False] * n, dtype=pl.Boolean),
+    })
+    decoded = schema.decode_status_series(frame["status"]).drop("confirmed")
+    return schema.conform(frame.hstack(decoded))
 
 
 # --- the denominator (contract OPEN item 1) -------------------------------
@@ -91,7 +95,7 @@ def test_filters_are_recorded_for_the_trace(events):
 def test_throughput_counts_inferred_closures(events):
     """Audit F6: a counter jump of 2 is two closures, not one row."""
     out = R.call_tool("throughput", events)
-    assert out["result"]["total_closures"] >= len(events)
+    assert out["result"]["total_closures"] >= events.height
 
 
 def test_throughput_buckets_cover_the_window(events):
@@ -113,6 +117,14 @@ def test_idle_detects_a_long_run():
     out = R.call_tool("idle_periods", frame, window_seconds=300)
     assert out["result"]["n_periods"] == 1
     assert out["result"]["idle_periods"][0]["duration_seconds"] >= 300
+
+
+def test_idle_ordering_is_total(events):
+    """Two stretches can share a duration to the second; the sort key must
+    still put them in one reproducible order (caught by the golden diff)."""
+    first = R.call_tool("idle_periods", events)["result"]["idle_periods"]
+    second = R.call_tool("idle_periods", events)["result"]["idle_periods"]
+    assert first == second
 
 
 # --- determinism ----------------------------------------------------------

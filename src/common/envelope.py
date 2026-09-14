@@ -15,49 +15,51 @@ from __future__ import annotations
 
 import math
 import time
+from datetime import date, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 
-import numpy as np
-import pandas as pd
+import polars as pl
 
 
 def jsonable(value: Any) -> Any:
-    """Cast numpy/pandas scalars to plain Python so json.dumps cannot fail.
+    """Cast Polars / numeric scalars to plain Python so json.dumps cannot fail.
 
-    The contract calls this out explicitly: numpy types serialise silently
-    wrong or not at all, and the agent chokes on them at report time.
+    The contract calls this out explicitly: engine-native types serialise
+    silently wrong or not at all, and the agent chokes on them at report time.
     """
     if value is None or isinstance(value, (str, bool)):
         return value
-    if isinstance(value, (np.bool_,)):
-        return bool(value)
-    if isinstance(value, (np.integer,)):
-        return int(value)
-    if isinstance(value, (np.floating, float)):
-        f = float(value)
-        return None if (math.isnan(f) or math.isinf(f)) else f
     if isinstance(value, int):
         return int(value)
-    if isinstance(value, (pd.Timestamp,)):
+    if isinstance(value, (float, Decimal)):
+        f = float(value)
+        return None if (math.isnan(f) or math.isinf(f)) else f
+    if isinstance(value, (datetime, date)):
         return value.isoformat()
-    if isinstance(value, pd.Timedelta):
+    if isinstance(value, timedelta):
         return value.total_seconds()
-    if value is pd.NaT or value is pd.NA:
-        return None
     if isinstance(value, dict):
         return {str(k): jsonable(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple, set, np.ndarray, pd.Index)):
+    if isinstance(value, pl.Series):
+        return [jsonable(v) for v in value.to_list()]
+    if isinstance(value, pl.DataFrame):
+        return [jsonable(row) for row in value.to_dicts()]
+    if isinstance(value, (list, tuple, set, frozenset)):
         return [jsonable(v) for v in value]
-    if isinstance(value, pd.Series):
-        return {str(k): jsonable(v) for k, v in value.items()}
-    if isinstance(value, pd.DataFrame):
-        return [jsonable(row) for row in value.to_dict(orient="records")]
+    # numpy scalars and anything else exposing .item()
+    item = getattr(value, "item", None)
+    if callable(item):
+        try:
+            return jsonable(item())
+        except Exception:
+            pass
     return value
 
 
-def data_window(events) -> dict:
+def data_window(events: pl.DataFrame | None) -> dict:
     """ts_min / ts_max of the rows a result was computed from."""
-    if events is None or len(events) == 0 or "ts" not in events.columns:
+    if events is None or events.height == 0 or "ts" not in events.columns:
         return {"ts_min": None, "ts_max": None}
     return {
         "ts_min": jsonable(events["ts"].min()),

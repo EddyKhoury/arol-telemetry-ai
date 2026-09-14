@@ -1,7 +1,7 @@
 """Ingestion interface - PERSON A IMPLEMENTS THIS.
 
 Audit finding F1: contract.pdf specifies the shape of the event table but never
-the function that produces it. Every tool takes `events: pd.DataFrame` as its
+the function that produces it. Every tool takes `events: pl.DataFrame` as its
 first argument, so without this interface Person B cannot write a line of agent
 code. This module is the agreed signature, stubbed, so that B builds against it
 today and A drops the real implementation in behind it.
@@ -29,7 +29,7 @@ def load_pool(cfg, pool: str, *, use_cache: bool = True):
     Files are read in timestamp order and treated as ONE continuous counter
     history, so a closure straddling a day boundary is still detected.
 
-    Must return a DataFrame conforming to common.schema.EVENT_COLUMNS.
+    Must return a Polars DataFrame conforming to common.schema.EVENT_COLUMNS.
     """
     raise NotImplementedByPersonA(
         "src/ingestion/api.load_pool is Person A's WP1 deliverable. "

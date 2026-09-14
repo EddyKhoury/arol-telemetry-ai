@@ -9,28 +9,36 @@ Derived from Person A's contract.pdf, with the amendments agreed in the audit:
   - timestamps are plant-local and naive     (audit F5)
   - status decoded as a bitfield, not an enum (audit F11)
   - count_delta > 1 is representable         (audit F6)
+
+ENGINE: Polars. Person A's pipeline is Polars end to end, and a pandas event
+table costs ~178 MB per machine-day (~5 GB for a 28-day pool), so the two
+halves share one engine rather than converting at the boundary.
 """
 
 from __future__ import annotations
+
+import polars as pl
 
 # Bump on any breaking change to EVENT_COLUMNS. Loader and generator both
 # stamp it; the conformance test asserts they agree.
 SCHEMA_VERSION = "1.0"
 
-# Column -> pandas dtype. Order is the canonical column order.
-EVENT_COLUMNS: dict[str, str] = {
-    "ts":            "datetime64[ns]",  # plant-local, naive. See TIMEZONE_POLICY.
-    "pool_id":       "string",          # which pool this event came from
-    "machine_id":    "string",          # parsed from the filename (MCC777...)
-    "head_id":       "string",          # "H01".."H36"
-    "head_index":    "int16",           # 1..36, for correct numeric sort order
-    "torque":        "float64",         # H## AppTorque on the increment row, Nm
-    "status":        "int16",           # H## Status on the increment row, raw code
-    "error_class":   "string",          # decoded from status
-    "reject_signal": "bool",            # status bit 0
-    "cap_present":   "bool",            # a cap was actually applied
-    "count_delta":   "int32",           # counter increment that produced this event
-    "inferred":      "bool",            # True when count_delta > 1 (dropped sample)
+# Column -> Polars dtype. Order is the canonical column order.
+# Datetime("us") matches Person A's EVENT_SCHEMA; every timestamp in the real
+# telemetry is a whole second, so the unit costs no precision either way.
+EVENT_COLUMNS: dict[str, pl.DataType] = {
+    "ts":            pl.Datetime("us"),  # plant-local, naive. See TIMEZONE_POLICY.
+    "pool_id":       pl.String,          # which pool this event came from
+    "machine_id":    pl.String,          # parsed from the filename (MCC777...)
+    "head_id":       pl.String,          # "H01".."H36"
+    "head_index":    pl.Int16,           # 1..36, for correct numeric sort order
+    "torque":        pl.Float64,         # H## AppTorque on the increment row, Nm
+    "status":        pl.Int16,           # H## Status on the increment row, raw code
+    "error_class":   pl.String,          # decoded from status
+    "reject_signal": pl.Boolean,         # status bit 0
+    "cap_present":   pl.Boolean,         # a cap was actually applied
+    "count_delta":   pl.Int32,           # counter increment that produced this event
+    "inferred":      pl.Boolean,         # True when count_delta > 1 (dropped sample)
 }
 
 TORQUE_UNIT = "Nm"
@@ -38,24 +46,27 @@ TORQUE_UNIT = "Nm"
 # Timestamps are kept in plant-local wall-clock time with no tzinfo, so that
 # "per day" and "per shift" match what an operator on the line would say.
 # The originating timezone is reported in pool_meta()["timezone"], not baked
-# into the values. Never call tz_localize/tz_convert on `ts`.
+# into the values. Never attach a time zone to `ts`.
+#
+# OPEN: the real files are stamped on a 16:00 boundary and the activity
+# pattern fits UTC+8, so the loader will have to CONVERT rather than pass
+# through. Confirm the plant's timezone with Person A before relying on any
+# per-day or per-shift figure.
 TIMEZONE_POLICY = "plant-local naive"
 
 
 # --- status decoding -------------------------------------------------------
 #
-# Observed in the real pools: only 0, 2 and 65 occur. The brief lists further
-# codes (3, 4/5, 8/9, 16/17, 32/33, 64) that pair as n / n+1, which is what a
-# bitfield looks like: bit 0 is the reject flag, the high bits are the error
-# category. That reading reproduces all three observed codes exactly:
-#     0  -> category 0  (Closure OK), not rejected
-#     2  -> category 2  (No Load),    not rejected
-#     65 -> category 64 (Bad Closure), rejected      (65 == 64 | 1)
+# Bit 0 is the reject flag; the high bits are the error category. Confirmed
+# against AROL's own code table (via Person A): every category appears as a
+# pair n / n+1 with identical error_class and reject_signal false / true --
+# 2/3 No Load, 4/5 No Closure, 8/9 No InTorque, 16/17 No CapTurns,
+# 32/33 Following Error, 64/65 Bad Closure. So 65 == 64 | 1.
 #
-# PROVISIONAL: confirmed for categories 0, 2 and 64 only. Categories 4, 8, 16
-# and 32 appear in the brief but their names are not known to us; they decode
-# to "Unknown (<code>)" and are counted as unconfirmed rather than crashing.
-# Replace CATEGORY_NAMES from AROL's own code table when we get it.
+# Only 0, 2 and 65 occur in the real pools. CATEGORY_NAMES below still holds
+# just the three categories this module was written against; filling in the
+# rest from Person A's table is a separate change, kept out of this one so the
+# Polars migration stays behaviour-preserving.
 
 REJECT_BIT = 0b1
 
@@ -72,6 +83,12 @@ NO_CAP_CATEGORIES: frozenset[int] = frozenset({2})
 CONFIRMED_STATUS_CODES: frozenset[int] = frozenset({0, 2, 65})
 
 
+def _category(expr: pl.Expr) -> pl.Expr:
+    """Clear bit 0 to get the error category. Avoids bitwise-and on a signed
+    dtype, which is easy to get subtly wrong."""
+    return expr - (expr % 2)
+
+
 def decode_status(status: int) -> dict:
     """Decode one raw status code into its contract fields.
 
@@ -80,8 +97,8 @@ def decode_status(status: int) -> dict:
     with new codes degrades instead of crashing.
     """
     status = int(status)
-    category = status & ~REJECT_BIT
-    reject = bool(status & REJECT_BIT)
+    category = status - (status % 2)
+    reject = bool(status % 2)
     name = CATEGORY_NAMES.get(category)
     return {
         "error_class": name if name is not None else f"Unknown ({status})",
@@ -92,23 +109,26 @@ def decode_status(status: int) -> dict:
     }
 
 
-def decode_status_series(status):
-    """Vectorised decode_status. Returns a DataFrame indexed like `status`."""
-    import pandas as pd
+def decode_status_series(status) -> pl.DataFrame:
+    """Vectorised decode_status.
 
-    codes = pd.Series(status).astype("int16")
-    category = codes & ~REJECT_BIT
-    names = category.map(CATEGORY_NAMES)
-    return pd.DataFrame(
-        {
-            "error_class": names.where(
-                names.notna(), "Unknown (" + codes.astype(str) + ")"
-            ).astype("string"),
-            "reject_signal": (codes & REJECT_BIT).astype(bool),
-            "cap_present": (~category.isin(NO_CAP_CATEGORIES)).astype(bool),
-            "confirmed": codes.isin(CONFIRMED_STATUS_CODES).astype(bool),
-        },
-        index=codes.index,
+    Accepts a Polars Series or any sequence of ints; returns a DataFrame with
+    columns error_class / reject_signal / cap_present / confirmed, in the same
+    row order as the input.
+    """
+    series = status if isinstance(status, pl.Series) else pl.Series("status", list(status))
+    frame = pl.DataFrame({"status": series.cast(pl.Int16)})
+    category = _category(pl.col("status"))
+    return frame.select(
+        pl.coalesce(
+            category.cast(pl.Int64).replace_strict(
+                CATEGORY_NAMES, default=None, return_dtype=pl.String
+            ),
+            pl.format("Unknown ({})", pl.col("status")),
+        ).alias("error_class"),
+        ((pl.col("status") % 2) != 0).alias("reject_signal"),
+        (~category.is_in(list(NO_CAP_CATEGORIES))).alias("cap_present"),
+        pl.col("status").is_in(list(CONFIRMED_STATUS_CODES)).alias("confirmed"),
     )
 
 
@@ -118,20 +138,16 @@ class SchemaError(ValueError):
     """Raised when a frame does not conform to EVENT_COLUMNS."""
 
 
-def empty_events():
+def empty_events() -> pl.DataFrame:
     """An empty event table with exactly the right columns and dtypes.
 
     Tools return this rather than None when a filter matches nothing, so
     downstream code never has to branch on the empty case.
     """
-    import pandas as pd
-
-    return pd.DataFrame(
-        {name: pd.Series(dtype=dtype) for name, dtype in EVENT_COLUMNS.items()}
-    )
+    return pl.DataFrame(schema=dict(EVENT_COLUMNS))
 
 
-def validate_events(events, *, strict: bool = True) -> list[str]:
+def validate_events(events: pl.DataFrame, *, strict: bool = True) -> list[str]:
     """Check a frame against the contract. Returns a list of problems.
 
     strict=True (default) raises SchemaError instead of returning. This is the
@@ -139,26 +155,28 @@ def validate_events(events, *, strict: bool = True) -> list[str]:
     loader a one-line change.
     """
     problems: list[str] = []
+    schema = events.schema
 
-    missing = [c for c in EVENT_COLUMNS if c not in events.columns]
+    missing = [c for c in EVENT_COLUMNS if c not in schema]
     if missing:
         problems.append(f"missing columns: {missing}")
 
-    extra = [c for c in events.columns if c not in EVENT_COLUMNS]
+    extra = [c for c in schema if c not in EVENT_COLUMNS]
     if extra:
         problems.append(f"unexpected columns: {extra} (extend EVENT_COLUMNS first)")
 
     for name, expected in EVENT_COLUMNS.items():
-        if name not in events.columns:
+        if name not in schema:
             continue
-        actual = str(events[name].dtype)
+        actual = schema[name]
         if actual != expected:
             problems.append(f"{name}: dtype {actual!r}, contract says {expected!r}")
 
-    if "ts" in events.columns and len(events):
-        if getattr(events["ts"].dtype, "tz", None) is not None:
+    if "ts" in schema and events.height:
+        dtype = schema["ts"]
+        if isinstance(dtype, pl.Datetime) and dtype.time_zone is not None:
             problems.append("ts is timezone-aware; contract says plant-local naive")
-        if not events["ts"].is_monotonic_increasing:
+        if not events["ts"].is_sorted():
             problems.append("ts is not sorted ascending")
 
     if strict and problems:
@@ -167,11 +185,9 @@ def validate_events(events, *, strict: bool = True) -> list[str]:
     return problems
 
 
-def conform(events):
+def conform(events: pl.DataFrame) -> pl.DataFrame:
     """Coerce a frame to the contract: column order and dtypes. Then validate."""
-    out = events.loc[:, [c for c in EVENT_COLUMNS if c in events.columns]].copy()
-    for name, dtype in EVENT_COLUMNS.items():
-        if name in out.columns and str(out[name].dtype) != dtype:
-            out[name] = out[name].astype(dtype)
+    present = [c for c in EVENT_COLUMNS if c in events.columns]
+    out = events.select([pl.col(c).cast(EVENT_COLUMNS[c]) for c in present])
     validate_events(out)
     return out

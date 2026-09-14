@@ -9,8 +9,9 @@ Person A's Phase-4 evaluation runs the same comparison over his statistical
 tools. The generator and the ground-truth format are shared.
 """
 
-import pandas as pd
+import polars as pl
 import pytest
+from datetime import datetime
 
 from src.analytics import kpi  # noqa: F401 - registers the tools
 from src.common import registry as R
@@ -49,7 +50,7 @@ def test_the_flagged_head_is_the_worst_head(events, faults):
 def test_a_clean_pool_produces_no_false_positives(events, faults):
     """Drop the faulty head; nothing should be flagged in what remains."""
     injected = faults["elevated_reject_rate"]["head_id"]
-    clean = events[events["head_id"] != injected]
+    clean = events.filter(pl.col("head_id") != injected)
     out = R.call_tool("anomaly_heads", clean, sigma=3.0)
     assert out["result"]["flagged_heads"] == []
 
@@ -59,33 +60,39 @@ def test_idle_detection_recovers_the_injected_window(events, faults):
     out = R.call_tool("idle_periods", events, window_seconds=300)
     assert out["ok"] and out["result"]["n_periods"] > 0
 
-    expected_start = pd.Timestamp(injected["start"])
-    expected_end = pd.Timestamp(injected["end"])
+    expected_start = datetime.fromisoformat(injected["start"])
+    expected_end = datetime.fromisoformat(injected["end"])
     longest = out["result"]["idle_periods"][0]
 
     # Within one polling interval of the injected boundaries.
-    assert abs((pd.Timestamp(longest["start"]) - expected_start).total_seconds()) <= 60
-    assert abs((pd.Timestamp(longest["end"]) - expected_end).total_seconds()) <= 60
+    assert abs((datetime.fromisoformat(longest["start"]) - expected_start).total_seconds()) <= 60
+    assert abs((datetime.fromisoformat(longest["end"]) - expected_end).total_seconds()) <= 60
 
 
 def test_the_idle_window_affects_every_head(events, faults):
     """A simultaneous stall on all heads is a supply problem, and the report
     says so - this test protects that inference."""
     out = R.call_tool("idle_periods", events, window_seconds=300)
-    assert len(out["result"]["heads_affected"]) == events["head_id"].nunique()
+    assert len(out["result"]["heads_affected"]) == events["head_id"].n_unique()
 
 
 def test_torque_drift_is_present_and_measurable(events, faults):
     """The drift fault is Person A's tool to detect; this asserts the signal
     is actually in the data, so a failure there is his code, not our fixture."""
     drift = faults["torque_drift"]
-    ok = events[events["status"] == 0]
-    before = ok[ok["ts"] < drift["start"]].groupby("head_id")["torque"].mean()
-    after = ok[ok["ts"] > drift["end"]].groupby("head_id")["torque"].mean()
-    shift = (after - before).sort_values(ascending=False)
+    f_start = datetime.fromisoformat(drift["start"])
+    f_end = datetime.fromisoformat(drift["end"])
+    ok = events.filter(pl.col("status") == 0)
+    before = (ok.filter(pl.col("ts") < f_start)
+                .group_by("head_id").agg(pl.col("torque").mean().alias("before")))
+    after = (ok.filter(pl.col("ts") > f_end)
+               .group_by("head_id").agg(pl.col("torque").mean().alias("after")))
+    shift = (before.join(after, on="head_id")
+                   .with_columns((pl.col("after") - pl.col("before")).alias("shift"))
+                   .sort("shift", descending=True))
 
-    assert shift.index[0] == drift["head_id"]
+    assert shift["head_id"][0] == drift["head_id"]
     expected = drift["detail"]["torque_to"] - drift["detail"]["torque_from"]
-    assert shift.iloc[0] == pytest.approx(expected, abs=0.05)
+    assert shift["shift"][0] == pytest.approx(expected, abs=0.05)
     # And it must stand well clear of the noise on every other head.
-    assert shift.iloc[0] > 5 * abs(shift.iloc[1])
+    assert shift["shift"][0] > 5 * abs(shift["shift"][1])
