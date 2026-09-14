@@ -28,3 +28,9 @@ Thumbs.db
 desktop.ini
 .vscode/
 .idea/
+
+# graphify generated output (regenerate with: graphify update .)
+graphify-out/
+
+# Telemetry archives - never commit (115 MB, exceeds GitHub limit)
+*.zip
