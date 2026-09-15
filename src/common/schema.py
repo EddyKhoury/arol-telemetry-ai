@@ -36,7 +36,7 @@ EVENT_COLUMNS: dict[str, pl.DataType] = {
     "status":        pl.Int16,           # H## Status on the increment row, raw code
     "error_class":   pl.String,          # decoded from status
     "reject_signal": pl.Boolean,         # status bit 0
-    "cap_present":   pl.Boolean,         # a cap was actually applied
+    "cap_present":   pl.Boolean,         # True / False / null - null = not knowable
     "count_delta":   pl.Int32,           # counter increment that produced this event
     "inferred":      pl.Boolean,         # True when count_delta > 1 (dropped sample)
 }
@@ -63,20 +63,35 @@ TIMEZONE_POLICY = "plant-local naive"
 # 2/3 No Load, 4/5 No Closure, 8/9 No InTorque, 16/17 No CapTurns,
 # 32/33 Following Error, 64/65 Bad Closure. So 65 == 64 | 1.
 #
-# Only 0, 2 and 65 occur in the real pools. CATEGORY_NAMES below still holds
-# just the three categories this module was written against; filling in the
-# rest from Person A's table is a separate change, kept out of this one so the
-# Polars migration stays behaviour-preserving.
+# Only 0, 2 and 65 occur in the real pools, but all seven categories are named
+# in AROL's own table (via Person A), so a grading dataset containing any of
+# them decodes to its real meaning rather than "Unknown".
 
 REJECT_BIT = 0b1
 
 CATEGORY_NAMES: dict[int, str] = {
     0:  "Closure OK",
     2:  "No Load",
+    4:  "No Closure",
+    8:  "No InTorque",
+    16: "No CapTurns",
+    32: "Following Error",
     64: "Bad Closure",
 }
 
-# Categories where no cap was physically present in the head.
+# Whether a cap was physically in the head is a SEPARATE question from what
+# went wrong, and we only know the answer for three categories:
+#
+#   Closure OK   a cap was applied successfully        -> present
+#   Bad Closure  a cap was applied badly               -> present
+#   No Load      the head cycled with nothing in it    -> absent
+#
+# For No Closure / No InTorque / No CapTurns / Following Error the source does
+# not say. Person A's contract sets cap_present to null there rather than
+# guessing, and he is right: guessing True would silently put those events into
+# the success-rate DENOMINATOR, quietly changing every rate on a dataset that
+# contains them. Null forces an honest decision downstream instead.
+CAP_PRESENT_CATEGORIES: frozenset[int] = frozenset({0, 64})
 NO_CAP_CATEGORIES: frozenset[int] = frozenset({2})
 
 # Codes we have actually seen in the data and can vouch for.
@@ -100,11 +115,16 @@ def decode_status(status: int) -> dict:
     category = status - (status % 2)
     reject = bool(status % 2)
     name = CATEGORY_NAMES.get(category)
+    if category in CAP_PRESENT_CATEGORIES:
+        cap = True
+    elif category in NO_CAP_CATEGORIES:
+        cap = False
+    else:
+        cap = None          # not guessed - see CAP_PRESENT_CATEGORIES above
     return {
         "error_class": name if name is not None else f"Unknown ({status})",
         "reject_signal": reject,
-        # Assumption: a cap was present unless the category says otherwise.
-        "cap_present": category not in NO_CAP_CATEGORIES,
+        "cap_present": cap,
         "confirmed": status in CONFIRMED_STATUS_CODES,
     }
 
@@ -127,7 +147,9 @@ def decode_status_series(status) -> pl.DataFrame:
             pl.format("Unknown ({})", pl.col("status")),
         ).alias("error_class"),
         ((pl.col("status") % 2) != 0).alias("reject_signal"),
-        (~category.is_in(list(NO_CAP_CATEGORIES))).alias("cap_present"),
+        pl.when(category.is_in(list(CAP_PRESENT_CATEGORIES))).then(True)
+          .when(category.is_in(list(NO_CAP_CATEGORIES))).then(False)
+          .otherwise(None).alias("cap_present"),
         pl.col("status").is_in(list(CONFIRMED_STATUS_CODES)).alias("confirmed"),
     )
 

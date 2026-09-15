@@ -80,7 +80,15 @@ def _confidence_note(n, min_n):
 # The KPI block, as Polars aggregations. Used standalone and per group.
 _RATE_AGGS = [
     pl.len().alias("n_cycles"),
+    # Counted explicitly rather than derived by subtraction. cap_present is
+    # tri-state, so `n_cycles - n_cap_present` would silently fold "we do not
+    # know whether a cap was there" in with "no cap was there", and overstate
+    # the No Load rate on any dataset carrying codes 4/8/16/32.
+    # sum() counts True as 1 and skips nulls, so each of these counts exactly
+    # one of the three states.
     pl.col("cap_present").sum().alias("n_cap_present"),
+    (~pl.col("cap_present")).sum().alias("n_no_load"),
+    pl.col("cap_present").is_null().sum().alias("n_cap_unknown"),
     (pl.col("status") == 0).sum().alias("n_success"),
     pl.col("reject_signal").sum().alias("n_reject"),
 ]
@@ -92,13 +100,17 @@ def _finish_rates(row: dict) -> dict:
     n_cap = int(row["n_cap_present"])
     n_ok = int(row["n_success"])
     n_reject = int(row["n_reject"])
-    n_no_load = n_all - n_cap
+    n_no_load = int(row["n_no_load"])
     return {
         "n_cycles": n_all,
         "n_cap_present": n_cap,
         "n_success": n_ok,
         "n_reject": n_reject,
         "n_no_load": n_no_load,
+        # Cycles whose status does not say whether a cap was present (codes
+        # 4/8/16/32). Excluded from every rate rather than assumed either way,
+        # and reported so a reader can see the denominator is incomplete.
+        "n_cap_unknown": int(row["n_cap_unknown"]),
         # The agreed denominator.
         "success_rate": (n_ok / n_cap) if n_cap else None,
         "reject_rate": (n_reject / n_cap) if n_cap else None,

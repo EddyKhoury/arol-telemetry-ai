@@ -52,7 +52,31 @@ def test_vectorised_decode_matches_scalar():
         scalar = schema.decode_status(code)
         assert frame["error_class"][i] == scalar["error_class"]
         assert bool(frame["reject_signal"][i]) == scalar["reject_signal"]
-        assert bool(frame["cap_present"][i]) == scalar["cap_present"]
+        # NOT bool(): cap_present is tri-state and bool(None) is False, which
+        # would quietly erase the distinction this column exists to carry.
+        assert frame["cap_present"][i] == scalar["cap_present"]
+
+
+def test_the_full_arol_category_table_is_decoded():
+    """All seven categories are named, so a grading dataset carrying 4, 8, 16
+    or 32 reads as its real meaning rather than 'Unknown'."""
+    for code, name in [(0, "Closure OK"), (2, "No Load"), (4, "No Closure"),
+                       (8, "No InTorque"), (16, "No CapTurns"),
+                       (32, "Following Error"), (64, "Bad Closure")]:
+        assert schema.decode_status(code)["error_class"] == name
+        # and the odd partner of each pair is the same class, rejected
+        assert schema.decode_status(code + 1)["error_class"] == name
+        assert schema.decode_status(code + 1)["reject_signal"] is True
+
+
+def test_cap_present_is_null_where_the_source_does_not_say():
+    """Guessing True would put these into the success-rate DENOMINATOR and
+    silently change every rate. Person A's null is the honest answer."""
+    assert schema.decode_status(0)["cap_present"] is True      # cap applied
+    assert schema.decode_status(65)["cap_present"] is True     # applied badly
+    assert schema.decode_status(2)["cap_present"] is False     # nothing there
+    for unknown in (4, 8, 16, 32, 255):
+        assert schema.decode_status(unknown)["cap_present"] is None
 
 
 # --- the event table ------------------------------------------------------

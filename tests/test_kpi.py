@@ -187,3 +187,18 @@ def test_naming_a_head_routes_to_head_detail():
     assert plan.calls[0][0] == "head_detail"
     assert plan.calls[0][1]["head_id"] == "H26"
     assert "H26" in plan.goal
+
+
+def test_unknown_cap_events_are_excluded_from_every_rate():
+    """Codes 4/8/16/32 do not say whether a cap was present. They must not be
+    counted as No Load (which subtraction would have done) and must not enter
+    the success-rate denominator (which guessing True would have done)."""
+    frame = _frame([0] * 10 + [2] * 5 + [4] * 3)
+    out = R.call_tool("success_rate", frame)["result"]["overall"]
+
+    assert out["n_cycles"] == 18
+    assert out["n_cap_present"] == 10      # only the status-0 closures
+    assert out["n_no_load"] == 5           # NOT 8 - the three 4s are not No Load
+    assert out["n_cap_unknown"] == 3
+    assert out["n_cap_present"] + out["n_no_load"] + out["n_cap_unknown"] == 18
+    assert out["success_rate"] == pytest.approx(1.0)      # 10 of 10, not 10 of 13
