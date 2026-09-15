@@ -2,7 +2,7 @@
 
 **Project Q3** — Multi-Agent System (MAS) for Industrial IoT Data Refinement and Analytics
 **Team** — Person A (data & analytics), Person B (agent & interface)
-**Updated** — 2026-09-12
+**Updated** — 2026-09-15
 **Deadline** — delivered before or during the **February 2027** exam session
 
 ---
@@ -41,10 +41,11 @@ These are from the Q3 brief and are what the project is marked against.
 
 | Metric | Value |
 |---|---|
-| Commits | 1 (`016ec27`) |
-| Python | 2,720 lines across 12 modules |
-| Tests | **61 passing** |
-| Registered analysis tools | 5 |
+| Commits | 7 |
+| Engine | **Polars** (migrated from pandas, verified against golden outputs) |
+| Tests | **107 passing** |
+| Registered analysis tools | 6 |
+| Planner | rule-based + **LLM (local Llama 3.2 3B via Ollama)** |
 | Working tree | Clean |
 | Analysis speed | 180 ms over 518,400 events |
 
@@ -121,6 +122,23 @@ the injected fault, with a regression test for the false-positive case.
 ## 4. What remains
 
 ### 4.1 Person B — in order
+
+| # | Task | State |
+|---|---|---|
+| 1 | Obtain the CSVs and AROL status-code table | **done** — archive present, bitfield confirmed |
+| 2 | Migrate to Polars | **done** — 16x faster, 5x less memory, golden-verified |
+| 3 | `head_detail`, fixing the silently-widened question | **done** |
+| 4 | LLM planner | **done** — local Ollama, automatic fallback to rules |
+| 5 | Plots and HTML/PDF export | **done** |
+| 6 | Scaling benchmark (objective 5) | **done** — 20.6x, growing with volume |
+| 7 | Architecture doc | **done** — `docs/architecture.md` |
+| 8 | Agent decision-flow doc | **done** — architecture.md section 5 |
+| 9 | **Install Ollama + `ollama pull llama3.2:3b`** | **outstanding — yours** |
+| 10 | **The adapter: `src/ingestion/api.py` to Person A's pipeline** | **outstanding — blocked on decisions below** |
+| 11 | Slide deck | outstanding |
+
+### 4.1b Superseded
+
 
 | # | Task | Notes |
 |---|---|---|
