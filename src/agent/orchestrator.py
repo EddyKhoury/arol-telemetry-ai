@@ -16,6 +16,8 @@ the tool registry), and never computes anything itself.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from ..common import config as config_mod
 from ..common import datasource, registry
 from ..analytics import kpi  # noqa: F401 - importing registers the KPI tools
@@ -144,13 +146,40 @@ class Orchestrator:
 
     # -- delivery ----------------------------------------------------------
 
-    def deliver(self, answer: dict, *, save=True) -> dict:
-        """Write the report and its trace to disk. Returns the paths."""
+    def deliver(self, answer: dict, *, save=True, formats=None) -> dict:
+        """Write the report, its figures and its trace. Returns the paths.
+
+        Markdown and the trace always. Plots and HTML/PDF are opt-in per call
+        or via agent.export in config, because rendering figures costs a
+        second or so and the terminal user usually does not want them.
+        """
         paths = {}
-        if save:
-            paths["report"] = str(report_mod.save(
-                answer["markdown"],
-                config_mod.get(self.cfg, "agent.report_dir", "reports")))
-            paths["trace"] = str(answer["trace"].save(
-                config_mod.get(self.cfg, "agent.trace_dir", "logs")))
+        if not save:
+            return paths
+
+        report_dir = Path(config_mod.get(self.cfg, "agent.report_dir", "reports"))
+        wanted = formats if formats is not None else             (config_mod.get(self.cfg, "agent.export") or ["markdown"])
+
+        md_path = report_mod.save(answer["markdown"], report_dir)
+        paths["report"] = str(md_path)
+        paths["trace"] = str(answer["trace"].save(
+            config_mod.get(self.cfg, "agent.trace_dir", "logs")))
+
+        figures = []
+        if "plots" in wanted or "html" in wanted or "pdf" in wanted:
+            from ..interface import plots as plots_mod
+            figures = plots_mod.render(answer["results"],
+                                       report_dir / md_path.stem)
+            paths["figures"] = [str(p) for _, p in figures]
+
+        if "html" in wanted or "pdf" in wanted:
+            from ..interface import export as export_mod
+            html_path = export_mod.save_html(
+                answer["markdown"], report_dir / md_path.stem,
+                figures=figures, stem=md_path.stem)
+            paths["html"] = str(html_path)
+            if "pdf" in wanted:
+                pdf = export_mod.save_pdf(html_path)
+                if pdf is not None:
+                    paths["pdf"] = str(pdf)
         return paths

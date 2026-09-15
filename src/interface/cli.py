@@ -30,14 +30,16 @@ REPORT_QUERIES = {
 }
 
 
-def _run(orchestrator, query, pool, save, quiet=False):
+def _run(orchestrator, query, pool, save, formats=None, quiet=False):
     answer = orchestrator.answer(query, pool=pool)
     if not quiet:
         print(answer["markdown"])
-    paths = orchestrator.deliver(answer, save=save)
-    if paths:
-        print(f"\n[saved] report: {paths['report']}", file=sys.stderr)
-        print(f"[saved] trace : {paths['trace']}", file=sys.stderr)
+    paths = orchestrator.deliver(answer, save=save, formats=formats)
+    for label in ("report", "html", "pdf", "trace"):
+        if paths.get(label):
+            print(f"[saved] {label:<6}: {paths[label]}", file=sys.stderr)
+    for figure in paths.get("figures", []):
+        print(f"[saved] figure: {figure}", file=sys.stderr)
     return answer
 
 
@@ -49,6 +51,9 @@ def main(argv=None) -> int:
     parser.add_argument("--pool", default=None, help="which data pool to use")
     parser.add_argument("--no-save", action="store_true",
                         help="print only; do not write report/trace files")
+    parser.add_argument("--format", action="append", dest="formats",
+                        choices=["markdown", "plots", "html", "pdf"],
+                        help="output formats; repeatable (default: config)")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_report = sub.add_parser("report", help="generate a canned report")
@@ -84,11 +89,11 @@ def main(argv=None) -> int:
         return 0
 
     if args.command == "report":
-        _run(orchestrator, REPORT_QUERIES[args.kind], args.pool, save)
+        _run(orchestrator, REPORT_QUERIES[args.kind], args.pool, save, args.formats)
         return 0
 
     if args.command == "ask":
-        answer = _run(orchestrator, " ".join(args.question), args.pool, save)
+        answer = _run(orchestrator, " ".join(args.question), args.pool, save, args.formats)
         return 0 if answer["status"] in ("ok", "partial") else 1
 
     if args.command == "chat":

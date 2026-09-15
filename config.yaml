@@ -66,4 +66,5 @@ agent:
     timeout_seconds: 60
     fallback_to_rules: true     # server down -> keyword planner, never a dead demo
   report_dir: reports
+  export: [markdown]           # markdown | plots | html | pdf
   trace_dir: logs

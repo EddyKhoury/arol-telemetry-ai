@@ -7,7 +7,7 @@ cache/
 # Generated output
 reports/
 logs/
-*.png
+# generated figures live under reports/, already ignored
 *.html
 *.pdf.out
 
