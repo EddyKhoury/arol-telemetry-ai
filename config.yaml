@@ -47,8 +47,23 @@ analytics:
 
 agent:
   planner: rules                # rules | llm  (rules is the deterministic fallback)
-  model: claude-sonnet-5
   temperature: 0.0
   max_steps: 8
+
+  # Local model, via Ollama. Runs offline: no API key, no network, nothing
+  # leaves the machine. A fixed seed makes the routing itself reproducible,
+  # which a hosted endpoint cannot promise even at temperature 0 because of
+  # server-side batching.
+  #   1. install Ollama          https://ollama.com/download
+  #   2. ollama pull llama3.2:3b
+  #   3. set planner: llm  below
+  llm:
+    provider: ollama
+    host: http://localhost:11434
+    model: llama3.2:3b
+    temperature: 0.0
+    seed: 42
+    timeout_seconds: 60
+    fallback_to_rules: true     # server down -> keyword planner, never a dead demo
   report_dir: reports
   trace_dir: logs

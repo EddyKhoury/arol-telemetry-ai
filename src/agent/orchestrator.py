@@ -42,6 +42,16 @@ class Orchestrator:
 
         pool = pool or (self.source.list_pools() or ["synthetic"])[0]
         plan = self.planner.plan(query, {"pool": pool})
+
+        # A planner that quietly fell back must say so: the report header
+        # names the planner, and naming the one we asked for rather than the
+        # one that answered would misrepresent how the answer was produced.
+        fallback_error = getattr(self.planner, "last_error", None)
+        if fallback_error:
+            trace.planner = f"{self.planner.name}->rules (fallback)"
+            trace.note(f"{self.planner.name} planner unavailable "
+                       f"({fallback_error}); routed by keyword rules instead")
+
         trace.step("plan", goal=plan.goal, rationale=plan.rationale,
                    calls=[c[0] for c in plan.calls], filters=plan.filters,
                    ambiguous=plan.ambiguous)

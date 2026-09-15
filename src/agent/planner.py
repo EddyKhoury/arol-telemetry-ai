@@ -143,27 +143,160 @@ class RulePlanner(Planner):
         )
 
 
+SYSTEM_PROMPT = """You route questions about industrial capping-machine \
+telemetry to analysis tools. You do NOT answer the question yourself and you \
+NEVER compute, estimate or invent a number - deterministic Python functions do \
+all arithmetic.
+
+Choose one or more of the supplied tools that together answer the user's \
+question, and fill in only parameters the user actually specified. Omit any \
+parameter they did not mention rather than guessing a value.
+
+If the question is not about capping telemetry, or is too vague to map onto a \
+tool, call no tools and reply with one short sentence saying what you need."""
+
+
+def _to_ollama_tools(specs: list[dict]) -> list[dict]:
+    """registry's Anthropic-style specs -> the OpenAI/Ollama function shape."""
+    return [
+        {"type": "function",
+         "function": {"name": s["name"],
+                      "description": s["description"],
+                      "parameters": s["input_schema"]}}
+        for s in specs
+    ]
+
+
 class LLMPlanner(Planner):
     """Model-driven planning over registry.get_tool_specs().
 
-    Deliberately unimplemented until the rule path is proven end to end. The
-    orchestrator already treats planners interchangeably, so landing this is a
-    self-contained change: build a tool-use request from get_tool_specs(),
-    run the loop at temperature 0, and return the same Plan object.
+    Talks to a local Ollama server, so the whole system runs offline: no API
+    key, no network, and - unlike a hosted endpoint, where server-side batching
+    makes even temperature 0 non-deterministic - a fixed seed makes the routing
+    itself reproducible.
+
+    The model only ever picks tool names and arguments. Every number in the
+    report still comes from tested Python, so a weak local model can misroute
+    but cannot produce a wrong figure.
+
+    Any failure - server down, model missing, timeout, unparseable reply -
+    falls back to RulePlanner rather than losing the answer. The trace records
+    which planner actually ran, so a report never misrepresents itself.
     """
 
     name = "llm"
 
     def __init__(self, cfg):
         self.cfg = cfg
-        self.model = cfg.get("agent", {}).get("model")
-        self.temperature = cfg.get("agent", {}).get("temperature", 0.0)
+        agent = cfg.get("agent", {}) or {}
+        llm = agent.get("llm", {}) or {}
+        self.host = llm.get("host", "http://localhost:11434").rstrip("/")
+        self.model = llm.get("model", agent.get("model", "llama3.2:3b"))
+        self.temperature = float(llm.get("temperature", agent.get("temperature", 0.0)))
+        self.seed = llm.get("seed", 42)
+        self.timeout = float(llm.get("timeout_seconds", 60))
+        self.fallback = bool(llm.get("fallback_to_rules", True))
+        self._rules = RulePlanner()
+        self.last_error: str | None = None
+
+    # -- transport ---------------------------------------------------------
+
+    def _chat(self, query: str, tools: list[dict]) -> dict:
+        """One non-streaming call to Ollama. Overridden in tests."""
+        import json
+        import urllib.request
+
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "system", "content": SYSTEM_PROMPT},
+                         {"role": "user", "content": query}],
+            "tools": tools,
+            "stream": False,
+            "options": {"temperature": self.temperature, "seed": self.seed},
+        }
+        request = urllib.request.Request(
+            f"{self.host}/api/chat",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            return json.loads(response.read().decode("utf-8"))
+
+    def available(self) -> bool:
+        """Is the server reachable and the model pulled?"""
+        import json
+        import urllib.request
+        try:
+            with urllib.request.urlopen(f"{self.host}/api/tags", timeout=3) as r:
+                names = [m.get("name", "") for m in json.loads(r.read()).get("models", [])]
+            return any(n == self.model or n.startswith(self.model.split(":")[0])
+                       for n in names)
+        except Exception:
+            return False
+
+    # -- planning ----------------------------------------------------------
 
     def plan(self, query: str, context: dict) -> Plan:
-        raise NotImplementedError(
-            "LLMPlanner is Step 4. Set agent.planner: rules in config.yaml. "
-            "Tool definitions are already available via registry.get_tool_specs()."
-        )
+        self.last_error = None
+        try:
+            specs = registry.get_tool_specs()
+            reply = self._chat(query, _to_ollama_tools(specs))
+            message = reply.get("message", {}) or {}
+            calls = self._extract_calls(message)
+
+            if not calls:
+                text = (message.get("content") or "").strip()
+                return Plan(
+                    goal="Clarify what the user is asking for.",
+                    ambiguous=True,
+                    clarification=text or (
+                        "I could not map that to an analysis. Ask about "
+                        "anomalies, idle periods, throughput or KPIs."),
+                    rationale=f"{self.model} selected no tool",
+                )
+
+            goal = (message.get("content") or "").strip() or \
+                f"Answer: {query.strip()}"
+            return Plan(goal=goal, calls=calls,
+                        filters=dict(calls[0][1]) if calls else {},
+                        rationale=f"{self.model} selected "
+                                  f"{', '.join(n for n, _ in calls)}")
+
+        except Exception as exc:
+            self.last_error = f"{type(exc).__name__}: {exc}"
+            if not self.fallback:
+                raise
+            plan = self._rules.plan(query, context)
+            plan.rationale = (f"LLM planner unavailable ({self.last_error}); "
+                              f"fell back to rules - {plan.rationale}")
+            return plan
+
+    def _extract_calls(self, message: dict) -> list[tuple[str, dict]]:
+        """Keep only calls naming a registered tool with accepted parameters.
+
+        A small local model will occasionally invent a tool or an argument.
+        call_tool would reject those anyway, but dropping them here saves a
+        wasted step and keeps the trace honest about what was really run.
+        """
+        calls: list[tuple[str, dict]] = []
+        for raw in message.get("tool_calls") or []:
+            function = raw.get("function", raw) or {}
+            name = function.get("name")
+            spec = registry.get(name) if name else None
+            if spec is None:
+                continue
+            args = function.get("arguments") or {}
+            if isinstance(args, str):
+                import json
+                try:
+                    args = json.loads(args)
+                except ValueError:
+                    args = {}
+            params, _ = registry.normalise_params(
+                {k: v for k, v in args.items() if v not in (None, "")})
+            calls.append((name, {k: v for k, v in params.items()
+                                 if k in spec.params}))
+        return calls
 
 
 def get_planner(cfg) -> Planner:
