@@ -1,0 +1,45 @@
+{
+  "generated": "2026-09-15T15:26:35",
+  "note": "identical results asserted at every size",
+  "rows": [
+    {
+      "day_files": 1,
+      "events": 765711,
+      "monolithic_seconds": 14.586,
+      "monolithic_peak_mb": 54.5,
+      "agent_seconds": 1.017,
+      "agent_peak_mb": 54.5,
+      "speedup": 14.3,
+      "agent_followup_seconds": 0.305,
+      "monolithic_5_questions_seconds": 72.93,
+      "agent_5_questions_seconds": 1.322,
+      "results_identical": true
+    },
+    {
+      "day_files": 2,
+      "events": 1764631,
+      "monolithic_seconds": 29.118,
+      "monolithic_peak_mb": 62.1,
+      "agent_seconds": 1.456,
+      "agent_peak_mb": 56.8,
+      "speedup": 20.0,
+      "agent_followup_seconds": 0.621,
+      "monolithic_5_questions_seconds": 145.592,
+      "agent_5_questions_seconds": 2.078,
+      "results_identical": true
+    },
+    {
+      "day_files": 4,
+      "events": 2813193,
+      "monolithic_seconds": 80.464,
+      "monolithic_peak_mb": 62.1,
+      "agent_seconds": 3.898,
+      "agent_peak_mb": 56.8,
+      "speedup": 20.6,
+      "agent_followup_seconds": 1.783,
+      "monolithic_5_questions_seconds": 402.319,
+      "agent_5_questions_seconds": 5.681,
+      "results_identical": true
+    }
+  ]
+}
