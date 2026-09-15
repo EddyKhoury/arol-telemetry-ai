@@ -137,3 +137,53 @@ def test_same_input_same_numbers(events, tool_name):
     first = R.call_tool(tool_name, events)["result"]
     second = R.call_tool(tool_name, events)["result"]
     assert first == second
+
+
+# --- head_detail: the named-head fix --------------------------------------
+
+def test_head_detail_requires_a_head():
+    """The only tool with a required parameter - the registry enforces it."""
+    out = R.call_tool("head_detail", _frame([0] * 50))
+    assert out["ok"] is False and "requires ['head_id']" in out["error"]
+
+
+def test_head_detail_reports_that_head(events, faults):
+    injected = faults["elevated_reject_rate"]["head_id"]
+    out = R.call_tool("head_detail", events, head_id=injected)
+    assert out["ok"]
+    assert out["result"]["head_id"] == injected
+    assert out["result"]["is_worst_head"] is True
+    assert out["result"]["rank_worst_first"] == 1
+
+
+def test_head_detail_places_the_head_against_the_fleet(events):
+    """A rate alone says nothing; the fleet position is the point."""
+    out = R.call_tool("head_detail", events, head_id="H01")
+    r = out["result"]
+    assert 1 <= r["rank_worst_first"] <= r["n_heads"]
+    assert r["fleet_median_success_rate"] is not None
+    assert r["difference_from_fleet_median"] == pytest.approx(
+        r["success_rate"] - r["fleet_median_success_rate"])
+
+
+def test_head_detail_counts_only_that_head(events):
+    """meta.n must be the head's events, not the whole fleet's."""
+    out = R.call_tool("head_detail", events, head_id="H01")
+    assert out["meta"]["n"] < events.height
+    assert out["meta"]["n"] == events.filter(pl.col("head_id") == "H01").height
+
+
+def test_head_detail_on_a_missing_head_fails_cleanly(events):
+    out = R.call_tool("head_detail", events, head_id="H99")
+    assert out["ok"] is False
+    assert "H99" in out["error"] and "heads present" in out["error"]
+
+
+def test_naming_a_head_routes_to_head_detail():
+    """The bug: the planner extracted head_id then discarded it, so the
+    report silently answered a wider question than the one asked."""
+    from src.agent.planner import RulePlanner
+    plan = RulePlanner().plan("is anything wrong with head 26?", {})
+    assert plan.calls[0][0] == "head_detail"
+    assert plan.calls[0][1]["head_id"] == "H26"
+    assert "H26" in plan.goal

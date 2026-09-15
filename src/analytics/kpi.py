@@ -386,3 +386,71 @@ def throughput(events, *, start=None, end=None, head_id=None, machine_id=None,
         window=data_window(frame),
         units={"throughput": "closures/hour"},
         notes=_confidence_note(frame.height, min_n))
+
+
+@tool(name="head_detail",
+      description=("Everything about ONE named head: its success, reject and "
+                   "No Load rates, where it ranks among all heads, and how far "
+                   "it sits from the fleet median. Use this whenever the user "
+                   "names a specific head."),
+      params=["head_id", "start", "end", "min_n"],
+      agent="kpi", owner="B", required=["head_id"])
+def head_detail(events, *, head_id, start=None, end=None, min_n=DEFAULT_MIN_N):
+    """One head, in the context of the others.
+
+    Exists because the fleet-comparison tools cannot take a single head - an
+    outlier test needs something to compare against - so asking "is anything
+    wrong with head 26?" used to silently widen into "which heads are bad?"
+    without saying so. This answers the question that was actually asked, and
+    still reports the fleet position, because a rate means nothing alone.
+    """
+    wanted = head_id if isinstance(head_id, str) else (list(head_id) or [None])[0]
+
+    # Rank over the WHOLE fleet in the same window, then pick our head out.
+    fleet, applied = _apply_filters(events, start=start, end=end)
+    if fleet.height == 0:
+        return failure("no closures matched the requested window",
+                       tool="head_detail", n=0)
+
+    per_head = (
+        fleet.group_by(["head_id", "head_index"]).agg(_RATE_AGGS)
+        .sort(["head_id", "head_index"])
+    )
+    rows = []
+    for row in per_head.iter_rows(named=True):
+        entry = {"head_id": row["head_id"], "head_index": int(row["head_index"])}
+        entry.update(_finish_rates(row))
+        rows.append(entry)
+
+    rows.sort(key=lambda r: (r["success_rate"] is None,
+                             r["success_rate"] if r["success_rate"] is not None else 0))
+
+    mine = next((r for r in rows if r["head_id"] == wanted), None)
+    if mine is None:
+        return failure(
+            f"no closures for head {wanted!r}; heads present: "
+            f"{', '.join(r['head_id'] for r in rows)}",
+            tool="head_detail", n=0)
+
+    applied.append(f"head_id={wanted}")
+    rank = rows.index(mine) + 1          # 1 = worst
+    rates = [r["success_rate"] for r in rows if r["success_rate"] is not None]
+    median = sorted(rates)[len(rates) // 2] if rates else None
+    delta = (mine["success_rate"] - median
+             if (median is not None and mine["success_rate"] is not None) else None)
+
+    result = {k: v for k, v in mine.items()}
+    result.update({
+        "rank_worst_first": rank,
+        "n_heads": len(rows),
+        "fleet_median_success_rate": median,
+        "difference_from_fleet_median": delta,
+        "is_worst_head": rank == 1,
+        "denominator_explained": DENOMINATOR_NOTE,
+    })
+
+    head_rows = fleet.filter(pl.col("head_id") == wanted)
+    return envelope(result, n=head_rows.height, tool="head_detail",
+                    filters_applied=applied, window=data_window(head_rows),
+                    units={"rates": "fraction of 1"},
+                    notes=_confidence_note(head_rows.height, min_n))

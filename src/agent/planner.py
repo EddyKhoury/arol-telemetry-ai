@@ -124,6 +124,15 @@ class RulePlanner(Planner):
 
         name, _, goal, calls = next(i for i in INTENTS if i[0] == intent)
 
+        # When the user names a head, answer about THAT head first. The
+        # fleet-comparison tools cannot take a single head - an outlier test
+        # needs something to compare against - so without this the question
+        # silently widened from "is head 26 bad?" to "which heads are bad?".
+        if "head_id" in filters and registry.get("head_detail") is not None:
+            calls = [("head_detail", {})] + list(calls)
+            goal = (f"Assess head {filters['head_id']} and place it against "
+                    f"the rest of the fleet.")
+
         resolved = []
         for tool_name, extra in calls:
             spec = registry.get(tool_name)

@@ -127,12 +127,33 @@ def _finding_throughput(result, meta) -> list[str]:
     return lines
 
 
+
+def _finding_head_detail(result, meta) -> list[str]:
+    where = ("the WORST of" if result["is_worst_head"]
+             else f"ranked {result['rank_worst_first']} worst of")
+    lines = [
+        f"- **{result['head_id']}**: success rate "
+        f"**{_pct(result['success_rate'])}** over "
+        f"{result['n_cap_present']:,} cap-present closures "
+        f"({result['n_reject']:,} rejects, No Load {_pct(result['no_load_rate'])}).",
+        f"- That is {where} {result['n_heads']} heads.",
+    ]
+    if result.get("difference_from_fleet_median") is not None:
+        delta = result["difference_from_fleet_median"] * 100
+        direction = "below" if delta < 0 else "above"
+        lines.append(f"- Fleet median is {_pct(result['fleet_median_success_rate'])}, "
+                     f"so this head sits {abs(delta):.3f} percentage points "
+                     f"{direction} it.")
+    return lines
+
+
 FINDING_TEMPLATES = {
     "success_rate": _finding_success_rate,
     "success_rate_per_head": _finding_success_rate_per_head,
     "anomaly_heads": _finding_anomaly_heads,
     "idle_periods": _finding_idle_periods,
     "throughput": _finding_throughput,
+    "head_detail": _finding_head_detail,
 }
 
 
