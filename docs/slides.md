@@ -270,32 +270,63 @@ machine.
 Agent pipeline vs. a **monolithic script** — the honest first draft: one
 function, row-wise accumulation in Python, one fixed answer.
 
-| day-files | events | monolith | agent | speed-up |
-|---|---|---|---|---|
-| 1 | 765,711 | 8.04 s | 0.32 s | 25.1× |
-| 2 | 1,764,631 | 16.07 s | 0.66 s | 24.5× |
-| 4 | 2,813,193 | 27.72 s | 1.34 s | 20.6× |
+**Fill this table from `docs/benchmark.md` on the day — do not quote from
+memory.** The shape of the result:
 
-**The per-question speed-up does not grow with volume** — it drifts *down*.
-Say so. What scales is the cost of **asking more**:
-
-| day-files | monolith, 5 questions vs 1 | agent, 5 questions vs 1 |
+| | one question | five questions |
 |---|---|---|
-| 1 | **5.00×** | 1.42× |
-| 2 | **5.00×** | 1.64× |
-| 4 | **5.00×** | 1.72× |
+| 1 day-file | 1.3× | 4.5× |
+| 2 day-files | 2.2× | 7.0× |
+| 4 day-files | 1.9× | 6.1× |
 
-> The monolith is *exactly* linear in questions — nothing is reused.
-> The agent reshapes once; each further question is milliseconds.
+**1.3–2.2× on one question is modest, and not a trend** — the spread overlaps
+between sizes. Say that; do not dress it up.
 
-    An interactive agent is asked many questions of one dataset. That is the
-    regime where a monolithic script degrades fastest, and it is the honest
-    objective-5 claim. An earlier draft said "speedup grows with volume" - it
-    does not, and a panel that reads the table will notice.
+> **The claim that holds at every size:**
+> **monolith pays 5.00× for five questions. Agent pays 1.5×.**
 
-    Also worth saying: the benchmark's own equality assertion caught a semantic
-    drift between the two implementations. A benchmark that only measured time
-    would have missed it.
+The monolith is *exactly* linear in the number of questions — nothing is
+reused. The agent reshapes once; each further question is milliseconds.
+
+    Lead with the break-even. It is the honest number, it pre-empts the
+    obvious challenge, and it makes the real claim land harder: this
+    architecture is not about computing one number faster, it is about the
+    second question being nearly free. An interactive agent is asked many
+    questions of one dataset.
+
+    If asked "so why bother for one query?" - you would not. You bother
+    because an operator asks six.
+
+---
+
+## 13b — How we got the benchmark wrong [B]
+
+The first harness timed both implementations **while a memory profiler was
+attached**.
+
+`tracemalloc` traces every allocation. The monolith is a Python loop
+allocating per closure; the agent path is Polars, allocating in Rust where
+tracemalloc cannot reach.
+
+| | cost of being profiled |
+|---|---|
+| Monolith | **~31×** |
+| Agent | **~1.2×** |
+
+> It reported a **25× speedup**. The real figure was about **2×**.
+> We were measuring the profiler.
+
+Fixed: time and memory in separate passes, each timing the **median of three
+runs**, and the spread published so a reader can see the noise.
+
+    Volunteer this one too. It is the same lesson as the anomaly detector: the
+    measurement was wrong in the direction that flattered us, and that is
+    precisely the direction you have to check hardest. The course rules name
+    it - "avoid auto-referentiality".
+
+    If they ask whether the memory column is trustworthy: no, and the report
+    says so. tracemalloc cannot see Rust allocations, so the agent's memory is
+    a floor, not a total.
 
 ---
 

@@ -252,3 +252,137 @@ def test_status_9_from_the_real_data_decodes_correctly():
     assert got["reject_signal"] is True
     assert got["cap_present"] is None
     assert got["confirmed"] is False       # real, but not in our vouched set
+
+
+# --- F4: the vocabulary is enforced at REGISTRATION, not at call time -----
+#
+# docs/architecture.md claims "registration fails at import if a tool invents
+# a name". That is the mechanism stopping the two halves of the project from
+# drifting apart, and nothing tested it.
+
+def test_registering_a_tool_with_an_invented_parameter_fails():
+    with pytest.raises(KeyError) as excinfo:
+        @R.tool(name="_invents_a_param", description="Test double.",
+                params=["head_number"], agent="kpi")
+        def _bad(events):
+            return {}
+    message = str(excinfo.value)
+    assert "head_number" in message and "PARAM_VOCABULARY" in message
+
+
+def test_registering_a_tool_under_an_unknown_agent_fails():
+    """Agent ownership is the MAS framing (F10); a typo would silently put a
+    tool outside every named agent and out of get_tool_specs(agent=...)."""
+    with pytest.raises(ValueError, match="agent must be one of"):
+        @R.tool(name="_unknown_agent", description="Test double.",
+                params=[], agent="analytcs")          # typo on purpose
+        def _bad(events):
+            return {}
+
+
+def test_registering_the_same_name_twice_fails():
+    """Silently replacing a tool would mean the planner's catalogue and the
+    dispatch table disagree about what runs."""
+    @R.tool(name="_registered_once", description="Test double.", params=[],
+            agent="kpi")
+    def _first(events):
+        return {}
+
+    with pytest.raises(KeyError, match="already registered"):
+        @R.tool(name="_registered_once", description="Test double.",
+                params=[], agent="kpi")
+        def _second(events):
+            return {}
+
+
+def test_a_tool_returning_something_that_is_not_an_envelope_is_caught(events):
+    """F14: the orchestrator never branches on key existence, so a tool that
+    forgets the envelope has to be caught HERE, not three frames later."""
+    @R.tool(name="_returns_a_number", description="Test double.", params=[],
+            agent="kpi")
+    def _bad(ev):
+        return 42
+
+    out = R.call_tool("_returns_a_number", events)
+    assert out["ok"] is False
+    assert "not an envelope" in out["error"] and "int" in out["error"]
+
+
+# --- the remaining coercion branches --------------------------------------
+
+def test_a_list_of_heads_survives_coercion(events):
+    """head_id is declared ["string", "array"] - a list must pass through
+    rather than being stringified into "['H01', 'H02']"."""
+    out = R.call_tool("idle_periods", events, head_id=["H01", "H02"])
+    assert out["ok"] is True
+
+
+def test_a_boolean_is_not_accepted_as_a_number(events):
+    """True == 1 in Python, so min_n=True would silently become min_n=1."""
+    out = R.call_tool("success_rate", events, min_n=True)
+    assert out["ok"] is False
+    assert "boolean" in out["error"]
+
+
+@pytest.mark.parametrize("value,expected", [
+    ("yes", True), ("true", True), ("1", True), ("on", True),
+    ("no", False), ("false", False), ("0", False), ("off", False),
+])
+def test_boolean_words_are_coerced_both_ways(value, expected):
+    coerced, notes, errors = R.coerce_params({"cap_present_only": value})
+    assert errors == []
+    assert coerced["cap_present_only"] is expected
+    assert notes
+
+
+def test_a_non_boolean_word_is_refused():
+    _, _, errors = R.coerce_params({"cap_present_only": "maybe"})
+    assert errors and "maybe" in errors[0]
+
+
+def test_a_number_given_for_a_string_becomes_a_string():
+    coerced, notes, errors = R.coerce_params({"machine_id": 777})
+    assert errors == [] and coerced["machine_id"] == "777"
+    assert notes
+
+
+def test_a_parameter_outside_the_vocabulary_passes_through_untouched():
+    """coerce_params only knows the frozen vocabulary; call_tool rejects
+    anything else by name, so coercion must not swallow it first."""
+    coerced, _, errors = R.coerce_params({"colour": "red"})
+    assert coerced == {"colour": "red"} and errors == []
+
+
+# --- jsonable: every branch, because the report must serialise ------------
+
+def test_jsonable_handles_the_engine_and_stdlib_types():
+    from datetime import date, datetime, timedelta
+
+    assert jsonable(timedelta(seconds=90)) == 90.0
+    assert jsonable(date(2026, 2, 1)) == "2026-02-01"
+    assert jsonable(datetime(2026, 2, 1, 6)) == "2026-02-01T06:00:00"
+    assert jsonable({"a": pl.Series([1, 2])}) == {"a": [1, 2]}
+    assert jsonable(pl.DataFrame({"x": [1], "y": ["a"]})) == [{"x": 1, "y": "a"}]
+    assert jsonable((1, 2)) == [1, 2]
+    assert sorted(jsonable({3, 1})) == [1, 3]
+    assert jsonable("plain") == "plain"
+
+
+def test_jsonable_survives_an_object_whose_item_raises():
+    """numpy scalars expose .item(); so do some things for which it fails.
+    The fallback must return the value rather than propagate."""
+    class Awkward:
+        def item(self):
+            raise RuntimeError("nope")
+
+    awkward = Awkward()
+    assert jsonable(awkward) is awkward
+
+
+def test_data_window_is_none_for_an_empty_frame():
+    from src.common.envelope import data_window
+
+    assert data_window(None) == {"ts_min": None, "ts_max": None}
+    assert data_window(schema.empty_events()) == {"ts_min": None, "ts_max": None}
+    assert data_window(pl.DataFrame({"x": [1]})) == {"ts_min": None,
+                                                     "ts_max": None}

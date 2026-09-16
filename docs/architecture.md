@@ -336,31 +336,47 @@ but what actually ran is written down.
 | | |
 |---|---|
 | pandas → Polars migration | 9.56 s → 0.60 s, 178 MB → 33 MB per machine-day |
-| Agent vs monolithic script, 4 day-files | 27.7 s → 1.34 s (**20.6×**) |
-| Same, one day-file | 8.04 s → 0.32 s (**25.1×**) |
-| Five questions instead of one, 4 day-files | 138.6 s → 2.31 s (**60×**) |
-| Analysis over 765,711 real closures | 320 ms |
-| Test suite | 141 tests |
+| Analysis over 765,711 real closures | ~320 ms |
+| Test suite | 255 tests, 94% line coverage |
 
-**The per-question speedup does not grow with volume** — it drifts *down*,
-25.1× → 24.5× → 20.6× as Polars' parallelism saturates and the monolith's
-fixed startup cost is amortised over more rows. An earlier draft of this
-document claimed it grew, from reading the first measurement and stopping.
+**Scaling figures are not repeated here.** They live in `docs/benchmark.md`,
+which is generated from `docs/benchmark.json` by the harness itself. They were
+hand-copied into this file and into the slide deck twice, and went stale both
+times — once in each direction.
 
-What scales is the cost of **asking more**:
+The shape of the result, which does not change between runs:
 
-| day-files | monolith, 5 questions vs 1 | agent, 5 questions vs 1 |
-|---|---|---|
-| 1 | 5.00× | 1.42× |
-| 2 | 5.00× | 1.64× |
-| 4 | 5.00× | 1.72× |
+- **On a single question the advantage is modest and noisy** — 1.3x to 2.2x
+  over 1, 2 and 4 day-files, with no reliable direction over that range and
+  run-to-run spread that overlaps between sizes. Building the whole event
+  table costs roughly what answering one question from it saves. Worth saying
+  out loud rather than hiding: a pipeline is not a dramatically faster way to
+  compute one number.
+- **The decisive result is the second question.** A monolith costs *exactly*
+  5.00× for five questions, at every size, because nothing is reused. The
+  agent costs a fraction of that: one reshape, then milliseconds of columnar
+  aggregation per question. An interactive agent is asked many questions of
+  one dataset, which is exactly the regime where a monolithic script degrades
+  fastest.
 
-The monolith costs *exactly* 5.00× for five questions at every size — perfectly
-linear, because there is nothing to reuse between them. The agent costs 1.4–1.7×,
-because the reshape happens once and each further question is milliseconds of
-columnar aggregation. That is the objective-5 claim, and it is an architectural
-property rather than a tuning result: an interactive agent is asked *many*
-questions of *one* dataset, which is precisely the regime where a monolithic
-script degrades fastest.
+### How this was got wrong, twice
+
+The first harness measured wall time **while tracemalloc was attached**.
+tracemalloc traces every allocation, so it costs the monolith — a Python loop
+allocating per closure — about **31×**, and the agent path — Polars, allocating
+in Rust where tracemalloc cannot reach — about **1.2×**. The reported 25×
+speedup was mostly the profiler's bias against Python loops. The real figure
+was about 2×.
+
+The second problem was sample size: with honest timing, the four-file agent
+measurement varied between **1.56 s and 3.61 s** across three runs, which is
+wider than the effect being measured. Each timing is now the median of three
+runs, the spread is published beside it, and time and memory are measured in
+separate passes.
+
+The memory column carries its own caveat, for the same class of reason:
+tracemalloc counts Python allocations only, so Polars' Rust-side frames are
+invisible to it. The agent's memory figure is a floor, not a total, and the
+two columns are not measuring the same thing.
 
 Full method and tables: `docs/benchmark.md`.

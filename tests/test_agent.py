@@ -307,3 +307,21 @@ def test_a_fleet_question_is_left_alone(cfg, monkeypatch):
         "tool_calls": [{"function": {"name": "anomaly_heads",
                                      "arguments": {}}}]}})
     assert planner.plan("is anything wrong?", {}).calls == [("anomaly_heads", {})]
+
+
+@pytest.mark.parametrize("query", [
+    "which head is worst",
+    "which head is the best",
+    "rank the heads",
+    "compare the heads",
+])
+def test_comparative_phrasings_reach_the_rule_planner(query):
+    """The LLM planner routes these fine. The rule planner did not, and the
+    rule planner is what answers when the model is unreachable - i.e. exactly
+    when a live demo needs it. "which head is worst" returned a clarification
+    request until `worst`/`best`/`rank`/`compare` became keywords."""
+    from src.agent.planner import RulePlanner
+
+    plan = RulePlanner().plan(query, {})
+    assert plan.ambiguous is False, f"{query!r} still asks for clarification"
+    assert "success_rate_per_head" in [name for name, _ in plan.calls]

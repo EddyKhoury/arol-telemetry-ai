@@ -34,3 +34,7 @@ graphify-out/
 
 # Telemetry archives - never commit (115 MB, exceeds GitHub limit)
 *.zip
+
+# Coverage
+.coverage
+htmlcov/

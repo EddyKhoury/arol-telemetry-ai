@@ -30,6 +30,26 @@ SHIFTS = (("A", 6), ("B", 14), ("C", 22))
 _TRUNCATE = {"hour": "1h", "day": "1d", "week": "1w"}
 
 
+def _as_series(expr_fn, ts: pl.Series):
+    """Evaluate an expression-returning helper against a Series.
+
+    The hour/day/week branches happen to work on a Series because
+    Series.dt.truncate returns a Series. The shift branch does not: it builds
+    pl.when() chains, which are expressions whatever you feed them, so it
+    returned an Expr even when handed a Series - and the caller got
+    "TypeError: 'Expr' object is not subscriptable" from a function whose
+    docstring promised both forms.
+
+    Nothing in src/ hits this today (kpi.py passes pl.col(...)), but this is
+    the module both halves of the project share by design (audit F5), and a
+    shared helper that behaves differently depending on which branch you take
+    is exactly the class of bug F5 exists to prevent.
+    """
+    name = ts.name or "ts"
+    return (pl.DataFrame({name: ts})
+            .select(expr_fn(pl.col(name)).alias(name))[name])
+
+
 def floor_to(ts: pl.Series | pl.Expr, bucket: str):
     """Floor a timestamp series or expression to the start of its bucket.
 
@@ -38,6 +58,9 @@ def floor_to(ts: pl.Series | pl.Expr, bucket: str):
     """
     if bucket not in BUCKETS:
         raise ValueError(f"unknown bucket {bucket!r}; expected one of {BUCKETS}")
+
+    if isinstance(ts, pl.Series):
+        return _as_series(lambda col: floor_to(col, bucket), ts)
 
     if bucket in _TRUNCATE:
         return ts.dt.truncate(_TRUNCATE[bucket])
@@ -63,6 +86,9 @@ def floor_to(ts: pl.Series | pl.Expr, bucket: str):
 
 def shift_name(ts: pl.Series | pl.Expr):
     """Name of the shift each timestamp falls in ("A"/"B"/"C")."""
+    if isinstance(ts, pl.Series):
+        return _as_series(shift_name, ts)
+
     starts = sorted(SHIFTS, key=lambda s: s[1])
     hour = ts.dt.hour()
     name = pl.lit(starts[-1][0], dtype=pl.String)

@@ -216,7 +216,7 @@ docs/contract.md. Neither side may change that shape alone.
 
 STATUS
 --------------------------------------------------------------------------------
-141 tests passing.
+255 tests passing, 94% line coverage.
 
 Working now:
     event-table schema and validation, bitfield status decoding, the tool

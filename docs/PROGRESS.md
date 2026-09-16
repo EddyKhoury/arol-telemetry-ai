@@ -41,7 +41,7 @@ tested Python, and the model is confined to routing and prose.
 |---|---|
 | Commits | 12 |
 | Engine | **Polars** on both sides |
-| Tests | **141 passing** |
+| Tests | **255 passing**, 94% line coverage |
 | Registered analysis tools | 6 |
 | Planner | rule-based + **LLM (local Llama 3.2 3B via Ollama), running** |
 | Runs on real telemetry | **yes** — Person A's pipeline output, via the adapter |

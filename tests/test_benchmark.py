@@ -92,7 +92,9 @@ def test_markdown_reports_both_tables():
         "agent_seconds": 1.017, "agent_peak_mb": 54.5, "speedup": 14.3,
         "agent_followup_seconds": 0.3,
         "monolithic_5_questions_seconds": 72.93,
-        "agent_5_questions_seconds": 1.322, "results_identical": True}]}
+        "agent_5_questions_seconds": 1.322, "results_identical": True,
+        "monolithic_seconds_all": [14.5, 14.586, 14.7],
+        "agent_seconds_all": [1.0, 1.017, 1.1], "repeats": 3}]}
     md = benchmark.to_markdown(report)
     assert "765,711" in md and "14.3x" in md
     assert "Five questions instead of one" in md
@@ -104,8 +106,24 @@ def test_markdown_reports_both_tables():
 @pytest.mark.skipif(not Path(benchmark.ARCHIVE).exists(),
                     reason="telemetry archive not present")
 def test_one_real_day_runs_and_agrees():
-    report = benchmark.run(sizes=(1,), extra_questions=1)
+    """The claim this test can actually make is AGREEMENT, not speed.
+
+    It used to assert `agent_seconds < monolithic_seconds`, which passed only
+    because both were timed under tracemalloc - a profiler that costs the
+    monolith ~31x and the agent ~1.2x. With honest timing the agent is
+    roughly BREAK-EVEN on a single day-file (0.9x-1.0x across runs): building
+    the whole event table costs about what answering one question from it
+    saves. The pipeline wins from two files onward, and wins decisively on
+    the second question. Asserting a speedup here would be asserting the
+    measurement bug.
+    """
+    report = benchmark.run(sizes=(1,), extra_questions=1, repeats=1,
+                           measure_memory=False)   # a whole extra traced run
     assert report["rows"], "no sizes completed"
     row = report["rows"][0]
     assert row["results_identical"] is True
-    assert row["agent_seconds"] < row["monolithic_seconds"]
+    assert row["events"] == 765_711
+
+    # What IS true at every size: a follow-up question is far cheaper than
+    # re-running the monolith, because the event table is already built.
+    assert row["agent_followup_seconds"] < row["monolithic_seconds"]

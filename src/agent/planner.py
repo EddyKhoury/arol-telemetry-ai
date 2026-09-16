@@ -51,7 +51,11 @@ INTENTS = (
     # (name, keywords, goal, tool calls as (tool, extra params))
     ("anomalies",
      ("anomal", "wrong", "problem", "issue", "fault", "outlier", "suspicious",
-      "reject", "failing", "fail"),
+      "reject", "failing", "fail",
+      # Comparative phrasings. The LLM planner routes these fine; the rule
+      # planner did not, and the rule planner is what answers when the model
+      # is unreachable - i.e. exactly when a demo needs it most.
+      "worst", "best", "rank", "compare"),
      "Identify heads behaving abnormally and quantify how far out they are.",
      [("anomaly_heads", {}), ("success_rate_per_head", {})]),
     ("idle",

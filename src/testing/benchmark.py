@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import statistics
 import time
 import tracemalloc
 import zipfile
@@ -43,6 +44,10 @@ import polars as pl
 from ..common import registry as R
 from ..common import schema
 from ..analytics import kpi  # noqa: F401 - registers the tools
+
+# Each timing is repeated and the median reported: a single run varied by
+# more than the effect being measured. See _measure.
+REPEATS = 3
 
 ARCHIVE = "Project-Q3-DataBase.zip"
 MONTH = "telemetry_MCC777eda3db57348ef8a3113a642ae74db_2026-02.zip"
@@ -138,25 +143,66 @@ def agent_pipeline(files) -> tuple[dict, pl.DataFrame]:
 
 # --- measurement ----------------------------------------------------------
 
-def _measure(fn, *args):
-    tracemalloc.start()
-    t0 = time.perf_counter()
-    value = fn(*args)
-    seconds = time.perf_counter() - t0
-    _, peak = tracemalloc.get_traced_memory()
-    tracemalloc.stop()
-    return value, seconds, peak / 1024 / 1024
+def _measure(fn, *args, repeats=REPEATS, measure_memory=False):
+    """Time it `repeats` times and take the median, then measure peak memory.
+
+    Two things were wrong with the first version, and both flattered the
+    agent pipeline.
+
+    1. It timed the code WHILE tracemalloc was attached. tracemalloc traces
+       every allocation, so it costs the monolith (a tight Python loop
+       allocating per closure) about 31x and the agent path (Polars, which
+       allocates in Rust where tracemalloc cannot see it) about 1.2x. The
+       reported 25x speedup was mostly the profiler's bias against Python
+       loops. Timing and memory are now separate passes.
+
+    2. It ran once. With honest timing, the four-file agent measurement
+       varied between 1.56s and 3.61s across three runs - Polars thread
+       scheduling and OS file caching - which is wider than the effect being
+       measured. A single run could have supported almost any conclusion.
+
+    The median of `repeats` runs is reported, and the spread is kept in the
+    row so a reader can see how noisy the measurement is rather than having
+    to trust a bare number. The course rules single out exactly this failure:
+    "avoid auto-referentiality".
+    """
+    times = []
+    value = None
+    for _ in range(max(1, repeats)):
+        t0 = time.perf_counter()
+        value = fn(*args)
+        times.append(time.perf_counter() - t0)
+
+    # The memory pass is a whole extra run WITH tracemalloc attached, which
+    # for the monolith costs ~31x its untraced time - several minutes at four
+    # day-files, and by far the largest part of this harness's runtime. It is
+    # worth that for the published artifact and not worth it for a test, so
+    # callers can turn it off.
+    peak = 0.0
+    if measure_memory:
+        tracemalloc.start()
+        fn(*args)
+        _, traced_peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+        peak = traced_peak / 1024 / 1024
+
+    return value, statistics.median(times), peak, times
 
 
-def run(sizes=(1, 2, 4, 8), archive=ARCHIVE, month=MONTH, extra_questions=4) -> dict:
+def run(sizes=(1, 2, 4, 8), archive=ARCHIVE, month=MONTH,
+        extra_questions=4, repeats=REPEATS,
+        measure_memory=False) -> dict:
     rows = []
     for n in sizes:
         files = day_files(Path(archive), month, n)
         if len(files) < n:
             break
 
-        mono, mono_s, mono_mb = _measure(monolithic, files)
-        (agent, events), agent_s, agent_mb = _measure(agent_pipeline, files)
+        mono, mono_s, mono_mb, mono_all = _measure(
+            monolithic, files, repeats=repeats, measure_memory=measure_memory)
+        (agent, events), agent_s, agent_mb, agent_all = _measure(
+            agent_pipeline, files, repeats=repeats,
+            measure_memory=measure_memory)
 
         # The numbers must agree, or the comparison is meaningless.
         assert mono["n_cycles"] == agent["n_cycles"], (mono, agent)
@@ -183,6 +229,9 @@ def run(sizes=(1, 2, 4, 8), archive=ARCHIVE, month=MONTH, extra_questions=4) -> 
             "agent_followup_seconds": round(followup_s, 3),
             "monolithic_5_questions_seconds": round(mono_s * 5, 3),
             "agent_5_questions_seconds": round(agent_s + followup_s, 3),
+            "monolithic_seconds_all": [round(t, 3) for t in mono_all],
+            "agent_seconds_all": [round(t, 3) for t in agent_all],
+            "repeats": len(mono_all),
             "results_identical": True,
         })
         print(f"  {n} day-file(s): {rows[-1]['events']:>9,} events   "
@@ -196,70 +245,156 @@ def run(sizes=(1, 2, 4, 8), archive=ARCHIVE, month=MONTH, extra_questions=4) -> 
 
 
 def to_markdown(report: dict) -> str:
+    rows = report["rows"]
+    repeats = rows[0].get("repeats", 1) if rows else 1
+
     lines = [
         "# Scaling benchmark", "",
         "Q3 objective 5. Two implementations of the same question over the "
-        "same real telemetry; the numbers are asserted identical at every "
-        "size, so this is a comparison rather than a straw man.", "",
-        "| day-files | events | monolith s | agent s | speedup | monolith MB | agent MB |",
-        "|---|---|---|---|---|---|---|",
+        "same real telemetry. The results are asserted identical at every "
+        "size, so this is a comparison and not a straw man.", "",
+        "## Method", "",
+        f"Each timing is the **median of {repeats} runs**, taken with no "
+        "profiler attached.", "",
+        "An earlier version of this harness timed both implementations WHILE "
+        "tracemalloc was running. tracemalloc traces every allocation, so it "
+        "costs the monolith - a Python loop allocating per closure - about "
+        "31x, and the agent path - Polars, allocating in Rust where "
+        "tracemalloc cannot reach - about 1.2x. It reported a 25x speedup "
+        "that was mostly the profiler. The real figure is in the table below.",
+        "",
+        "A single run was also not enough: with honest timing, the four-file "
+        "agent measurement varied between 1.56s and 3.61s across three runs, "
+        "which is wider than the effect being measured. Hence the median, and "
+        "the published spread.",
+        "",
     ]
-    for r in report["rows"]:
-        lines.append(
-            f"| {r['day_files']} | {r['events']:,} | {r['monolithic_seconds']} | "
-            f"{r['agent_seconds']} | {r['speedup']}x | {r['monolithic_peak_mb']} | "
-            f"{r['agent_peak_mb']} |")
+    measured_memory = any(r.get("monolithic_peak_mb") for r in rows)
+    if measured_memory:
+        lines += ["| day-files | events | monolith s | agent s | speedup "
+                  "| monolith MB | agent MB |",
+                  "|---|---|---|---|---|---|---|"]
+    else:
+        lines += ["| day-files | events | monolith s | agent s | speedup |",
+                  "|---|---|---|---|---|"]
+    for r in rows:
+        row = (f"| {r['day_files']} | {r['events']:,} | "
+               f"{r['monolithic_seconds']} | {r['agent_seconds']} | "
+               f"{r['speedup']}x |")
+        if measured_memory:
+            row += (f" {r['monolithic_peak_mb']} | {r['agent_peak_mb']} |")
+        lines.append(row)
+
+    if rows and rows[0].get("monolithic_seconds_all"):
+        lines += ["", "Spread across runs (min-max), so the noise is visible:",
+                  "", "| day-files | monolith | agent |", "|---|---|---|"]
+        for r in rows:
+            mono, agent = r["monolithic_seconds_all"], r["agent_seconds_all"]
+            lines.append(f"| {r['day_files']} | {min(mono)}-{max(mono)}s | "
+                         f"{min(agent)}-{max(agent)}s |")
+
+    # --- the trend, described from the data rather than asserted ---------
+    if len(rows) >= 2:
+        speedups = [r["speedup"] for r in rows]
+        sizes = " -> ".join(f"{x}x" for x in speedups)
+        rising = all(b >= a for a, b in zip(speedups, speedups[1:]))
+        falling = all(b <= a for a, b in zip(speedups, speedups[1:]))
+
+        lines += ["", "## What the numbers say", "",
+                  f"Single-question speedup across sizes: **{sizes}**."]
+        if rising:
+            lines.append("It rises with volume over the sizes measured.")
+        elif falling:
+            lines.append("It falls with volume over the sizes measured.")
+        else:
+            # Do not describe a trend the data does not support. An earlier
+            # version reported first-vs-last and called a non-monotonic
+            # sequence "growing".
+            lines.append(
+                f"That is **not a trend** - it is not monotonic, and the "
+                f"spread above overlaps between sizes. The honest reading is "
+                f"a modest and noisy {min(speedups)}x to {max(speedups)}x, "
+                f"with no reliable direction over this range. More sizes and "
+                f"more repeats would be needed to claim one.")
+
+        lines += [
+            "",
+            "Either way the single-question figure is the WEAK claim. "
+            "Building the whole event table costs roughly what answering one "
+            "question from it saves, so a pipeline is not a dramatically "
+            "faster way to compute one number. It is a way to make the "
+            "*second* question nearly free - see below.",
+        ]
+
     lines += ["", "## Five questions instead of one", "",
-              "A monolith computes one fixed answer, so a second question costs "
-              "a second full pass. The pipeline reshapes once and answers from "
-              "the event table.", "",
+              "A monolith computes one fixed answer, so a second question "
+              "costs a second full pass. The pipeline reshapes once and "
+              "answers from the event table.", "",
               "| day-files | monolith x5 | agent, 1 reshape + 5 tools | speedup |",
               "|---|---|---|---|"]
-    for r in report["rows"]:
+    for r in rows:
         mono5 = r["monolithic_5_questions_seconds"]
         agent5 = r["agent_5_questions_seconds"]
-        lines.append(
-            f"| {r['day_files']} | {mono5}s | {agent5}s | "
-            f"{mono5 / agent5:.0f}x |")
+        lines.append(f"| {r['day_files']} | {mono5}s | {agent5}s | "
+                     f"{mono5 / agent5:.1f}x |")
 
-    lines += [
-        "", "## What actually scales", "",
-        "The per-question speedup does NOT grow with data volume - it drifts "
-        "down slightly, from 25x at one day-file to 21x at four, as Polars' "
-        "parallelism saturates and the monolith's fixed startup cost is "
-        "amortised over more rows. Reporting it as growing would be reading "
-        "the first measurement and stopping.", "",
-        "What scales is the cost of ASKING MORE. A monolith computes one fixed "
-        "answer, so every extra question costs another full parse. The "
-        "pipeline reshapes once and answers from the event table:", "",
-        "| day-files | monolith, 5q vs 1q | agent, 5q vs 1q |",
-        "|---|---|---|",
-    ]
-    for r in report["rows"]:
-        mono_ratio = (r["monolithic_5_questions_seconds"] /
-                      r["monolithic_seconds"])
+    lines += ["", "| day-files | monolith, 5q vs 1q | agent, 5q vs 1q |",
+              "|---|---|---|"]
+    agent_ratios = []
+    for r in rows:
+        mono_ratio = r["monolithic_5_questions_seconds"] / r["monolithic_seconds"]
         agent_ratio = r["agent_5_questions_seconds"] / r["agent_seconds"]
+        agent_ratios.append(agent_ratio)
         lines.append(f"| {r['day_files']} | {mono_ratio:.2f}x | "
                      f"{agent_ratio:.2f}x |")
 
-    lines += [
-        "",
-        "The monolith costs **exactly 5.00x** for five questions at every "
-        "size - perfectly linear in the number of questions, because there is "
-        "nothing to reuse between them. The agent costs 1.4x to 1.7x, because "
-        "the reshape happens once and each further question is a few "
-        "milliseconds of columnar aggregation.",
-        "",
-        "That is the objective-5 claim, and it is an architectural property "
-        "rather than an implementation detail: an interactive agent is asked "
-        "many questions of one dataset, which is the regime where a monolithic "
-        "script degrades fastest.",
-        "",
-        "Memory is the quieter result. The agent's peak holds at 56.8 MB from "
-        "two day-files onward while the monolith's grows to 62.1 MB, because "
-        "the event table is a fixed-width projection of the raw telemetry, not "
-        "a copy of it.",
-    ]
+    if agent_ratios:
+        lines += [
+            "",
+            "The monolith costs **exactly 5.00x** for five questions at every "
+            "size - perfectly linear in the number of questions, because "
+            "there is nothing to reuse between them. The agent costs "
+            f"{min(agent_ratios):.2f}x to {max(agent_ratios):.2f}x, because "
+            "the reshape happens once and each further question is "
+            "milliseconds of columnar aggregation.",
+            "",
+            "**That is the objective-5 result.** It is an architectural "
+            "property rather than a tuning one: an interactive agent is asked "
+            "many questions of one dataset, and that is the regime where a "
+            "monolithic script degrades fastest. The single-question speedup "
+            "is the weaker claim and the one most sensitive to measurement "
+            "error - which is exactly how the first version of this harness "
+            "went wrong.",
+        ]
+
+    if measured_memory:
+        mono_mb = [r["monolithic_peak_mb"] for r in rows]
+        agent_mb = [r["agent_peak_mb"] for r in rows]
+        lines += [
+            "", "## A caveat on the memory column", "",
+            f"The agent's peak reads {max(agent_mb)} MB against the "
+            f"monolith's {max(mono_mb)} MB, but do not lean on that. "
+            "tracemalloc counts PYTHON allocations only, and Polars allocates "
+            "its frames in Rust, where tracemalloc cannot see them. So the "
+            "agent column is a floor, not a total, and the two columns are "
+            "not measuring the same thing - the same error as timing under "
+            "the profiler, one column over.",
+        ]
+    else:
+        lines += [
+            "", "## Memory is not reported here", "",
+            "Peak memory is measured only with `--memory`, and it is off by "
+            "default for two reasons. It costs a whole extra run under "
+            "tracemalloc (~31x for the monolith, minutes at four day-files). "
+            "More importantly, tracemalloc counts PYTHON allocations only, "
+            "and Polars allocates its frames in Rust where tracemalloc cannot "
+            "see them - so the agent's figure would be a floor rather than a "
+            "total, and the two columns would not be measuring the same "
+            "thing. A real comparison needs peak RSS per process, which is "
+            "not built here. Publishing a number we have already said is "
+            "untrustworthy would be worse than publishing none.",
+        ]
+
     return "\n".join(lines) + "\n"
 
 
@@ -267,11 +402,22 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Scaling benchmark (objective 5)")
     parser.add_argument("--sizes", type=int, nargs="+", default=[1, 2, 4, 8])
     parser.add_argument("--archive", default=ARCHIVE)
+    parser.add_argument("--memory", action="store_true",
+                        help="also measure peak PYTHON memory. Off by "
+                             "default: it is a whole extra run under "
+                             "tracemalloc (~31x for the monolith) and it "
+                             "cannot see Polars' Rust allocations, so the "
+                             "two columns do not measure the same thing")
+    parser.add_argument("--repeats", type=int, default=REPEATS,
+                        help="timing runs per measurement; the median "
+                             "is reported")
     parser.add_argument("--out", default="docs/benchmark.md")
     args = parser.parse_args(argv)
 
     print(f"Scaling benchmark over {args.archive}")
-    report = run(tuple(args.sizes), archive=args.archive)
+    report = run(tuple(args.sizes), archive=args.archive,
+                 repeats=args.repeats,
+                 measure_memory=args.memory)
     if not report["rows"]:
         print("no data - is the telemetry archive present?")
         return 1

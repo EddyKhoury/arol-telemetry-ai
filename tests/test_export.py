@@ -132,3 +132,66 @@ def test_no_save_writes_nothing(cfg, tmp_path):
     cfg["agent"]["report_dir"] = str(tmp_path / "reports")
     agent = Orchestrator(cfg)
     assert agent.deliver(agent.answer("kpi summary"), save=False) == {}
+
+
+# --- PDF: the failure paths, which are the ones that matter --------------
+#
+# save_pdf shells out to a headless Chrome/Edge. Asserting that a PDF appears
+# would tie the suite to whatever browser happens to be installed. What must
+# hold on every machine is the promise in its docstring: a missing PDF never
+# costs the user the report they already have.
+
+def test_no_browser_returns_none_rather_than_raising(tmp_path, monkeypatch):
+    from src.interface import export
+
+    html = tmp_path / "r.html"
+    html.write_text("<p>hi</p>", encoding="utf-8")
+    monkeypatch.setattr("shutil.which", lambda _: None)
+    monkeypatch.setattr("pathlib.Path.exists",
+                        lambda self: self.suffix == ".html")
+    assert export.save_pdf(html) is None
+
+
+def test_a_browser_that_crashes_returns_none(tmp_path, monkeypatch):
+    from src.interface import export
+
+    html = tmp_path / "r.html"
+    html.write_text("<p>hi</p>", encoding="utf-8")
+
+    def boom(*args, **kwargs):
+        raise OSError("browser exploded")
+    monkeypatch.setattr("subprocess.run", boom)
+    assert export.save_pdf(html) is None
+
+
+def test_a_browser_that_writes_nothing_returns_none(tmp_path, monkeypatch):
+    """Chrome can exit 0 and still produce no file. Returning the path anyway
+    would hand the caller a path to nothing."""
+    from src.interface import export
+
+    html = tmp_path / "r.html"
+    html.write_text("<p>hi</p>", encoding="utf-8")
+    monkeypatch.setattr("subprocess.run", lambda *a, **k: None)
+    assert export.save_pdf(html) is None
+
+
+def test_deliver_still_reports_when_the_pdf_cannot_be_made(cfg, tmp_path,
+                                                           monkeypatch):
+    """The whole point: no browser on the exam machine must not mean no
+    report."""
+    from pathlib import Path
+
+    from src.agent.orchestrator import Orchestrator
+    from src.interface import export
+
+    monkeypatch.setattr(export, "save_pdf", lambda *a, **k: None)
+    cfg["agent"]["report_dir"] = str(tmp_path / "reports")
+    cfg["agent"]["trace_dir"] = str(tmp_path / "logs")
+
+    agent = Orchestrator(cfg)
+    answer = agent.answer("kpi summary")
+    paths = agent.deliver(answer, formats=["markdown", "html", "pdf"])
+
+    assert "pdf" not in paths            # honestly absent
+    assert Path(paths["report"]).exists()
+    assert Path(paths["html"]).exists()
