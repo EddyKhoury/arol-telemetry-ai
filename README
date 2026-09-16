@@ -23,14 +23,15 @@ REQUIREMENTS
 --------------------------------------------------------------------------------
 Python 3.11 or newer, plus:
 
-    pandas, numpy, scipy, pyyaml, pyarrow, matplotlib, pytest
+    polars, numpy, scipy, pyyaml, pyarrow, matplotlib, pytest
 
 Install with:
 
     pip install -r requirements.txt
 
-No API key and no network access are needed for anything described below: the
-default planner is rule-based. The LLM planner is optional (see STEP 4).
+No API key and no network access are needed for ANY of this, including the
+LLM planner: the model runs locally through Ollama. Nothing leaves the
+machine. The default planner is the rule-based one and needs nothing at all.
 
 
 HOW TO RUN
@@ -55,6 +56,13 @@ All commands are run from the repository root.
   Interactive session:
       python -m src.interface.cli chat
 
+  Run the scaling benchmark (objective 5):
+      python -m src.testing.benchmark --sizes 1 2 4
+
+  Rebuild the real-data cache by running Person A's own pipeline
+  (needs his repo checked out beside this one, as ../person-a):
+      python scripts/refresh_person_a_cache.py
+
   Global options (these go BEFORE the subcommand):
       --config PATH   use a different config file
       --pool NAME     analyse a specific pool
@@ -75,20 +83,26 @@ deliberately injected into the synthetic data.
 
 DATA
 --------------------------------------------------------------------------------
-Two sources, selected by one key in config.yaml:
+Three sources, selected by one key in config.yaml:
 
     data:
-      source: synthetic     # or: real
+      source: synthetic     # or: person_a, real
 
   synthetic  Generated events with faults injected at known locations. Used
              for development and as the ground truth for evaluation. Needs no
              telemetry files. This is the default.
 
-  real       Person A's WP1 loader over the AROL CSV files. Point
-             data.pools at the day-files first.
+  person_a   Person A's real event table, read from the Parquet his pipeline
+             writes and converted by src/ingestion/adapter.py. His frame
+             carries 8 of the 12 contract columns and types status as Int64;
+             the adapter supplies the rest and DECLARES what it cannot
+             recover. Point data.person_a.<pool> at the Parquet file.
 
-Everything else is identical between the two: both produce the same event
-table, and the same tests run against either.
+  real       Person A's in-process WP1 loader (src/ingestion/api.py). Still a
+             stub; person_a is the working path today.
+
+Everything else is identical between them: all three produce the same event
+table, and the same tests run against any of them.
 
 INPUT FORMAT (real source)
   One CSV per machine per day, ~57 MB, 86,400 rows (one sample per second).
@@ -113,25 +127,39 @@ EVENT TABLE (what every analysis tool consumes)
     status         raw status code
     error_class    decoded name (Closure OK / No Load / Bad Closure / Unknown)
     reject_signal  status bit 0
-    cap_present    a cap was actually applied
+    cap_present    TRI-STATE. True = a cap was in the head, False = nothing
+                   was, NULL = the status code does not say. Never guessed:
+                   a guess of True would silently enter the success-rate
+                   denominator and change every rate
     count_delta    counter increment that produced this event
     inferred       True when count_delta > 1 (a dropped poll)
 
 STATUS CODES
-  Observed in the real data: 0, 2 and 65 only.
+  Decoded as a BITFIELD, not an enum: bit 0 is the reject flag and the high
+  bits are the error category, so 65 == 64 | 1. Every category appears as a
+  pair n / n+1 with the same meaning, rejected or not.
 
-    0    Closure OK    a cap was applied successfully, torque about 2.0 Nm
-    2    No Load       the head cycled with no cap present, torque about 0
-    65   Bad Closure   a reject; rare (single digits per file)
+    0    Closure OK        a cap was applied successfully, torque about 2.0 Nm
+    2    No Load           the head cycled with no cap present, torque about 0
+    4    No Closure
+    8    No InTorque
+    16   No CapTurns
+    32   Following Error
+    64   Bad Closure       (65 = 64|1 is the rejected form, and what occurs)
 
-  Decoded as a bitfield rather than an enum: bit 0 is the reject flag and the
-  high bits are the error category, so 65 == 64 | 1. Unseen codes decode to
-  "Unknown (<code>)" and are marked unconfirmed instead of crashing.
+  Seen in the real February data so far: 0, 2, 65 and - in four day-files,
+  twice - 9. Code 9 == 8|1 is No InTorque, rejected. It was decoded correctly
+  with no code change, which is the argument for the bitfield: an enum built
+  from the observed codes would have returned "Unknown (9)". Anything genuinely
+  unknown still decodes to "Unknown (<code>)" and is marked unconfirmed rather
+  than crashing.
 
   IMPORTANT: the success rate uses cap-present closures as its denominator.
   A No Load cycle is not a failed closure - there was no cap to close - so
-  counting it as a failure understates performance badly. Reports always
-  state which denominator was used and give both numbers.
+  counting it as a failure understates performance badly. On the real
+  2026-02-01 data the two denominators differ by 44.1 percentage points
+  (99.9991% against 55.87%). Reports always state which was used and give
+  both numbers.
 
 
 CONFIGURATION
@@ -140,25 +168,35 @@ Everything lives in config.yaml; nothing is hard-coded. Copy it to
 config.local.yaml to override values locally without touching the shared file
 (config.local.yaml is gitignored).
 
-    data.source        synthetic | real
+    data.source        synthetic | person_a | real
     data.pools         ordered day-files per pool
-    data.timezone      plant-local timezone the timestamps are recorded in
+    data.person_a      pool -> Parquet event table from Person A's pipeline
+    data.timezone      plant-local timezone. Currently NULL and reported as
+                       "unconfirmed": the real files span 16:00 to 16:00,
+                       which fits UTC+8 and not Europe/Rome. Person A must
+                       confirm with AROL - every per-day and per-shift KPI
+                       depends on it
     analytics.*        thresholds (sigma, idle window, min_n, torque range)
     agent.planner      rules | llm
-    agent.model        model id used by the LLM planner
+    agent.llm.*        host, model, seed, timeout, fallback_to_rules
 
 
 REPOSITORY LAYOUT
 --------------------------------------------------------------------------------
     config.yaml            all paths, thresholds and parameters
-    src/common/            schema, envelope, registry, config, time helpers
-    src/ingestion/         Person A: loader, validation, closure detection
-    src/analytics/         analysis tools (Person B: KPI half)
+    src/common/            schema, envelope, registry, config, datasource,
+                           time helpers
+    src/ingestion/         api.py (Person A's stub) and adapter.py, which
+                           converts his event table to the contract
+    src/analytics/         analysis tools (Person B: the KPI half)
     src/agent/             orchestrator, planner, report assembler, trace log
-    src/interface/         CLI
-    src/testing/           synthetic generator with injected faults
-    tests/                 test suite
-    docs/                  contract, audit, architecture notes
+    src/interface/         CLI, plots, HTML/PDF export
+    src/testing/           synthetic generator, scaling benchmark
+    scripts/               refresh_person_a_cache.py - regenerates the real
+                           event table by running Person A's pipeline
+    tests/                 test suite, plus person_a_bridge.py which runs his
+                           pipeline in a subprocess for the live integration
+    docs/                  contract, audit, architecture, benchmark, slides
     reports/               generated reports    (gitignored)
     logs/                  generated traces     (gitignored)
 
@@ -178,14 +216,24 @@ docs/contract.md. Neither side may change that shape alone.
 
 STATUS
 --------------------------------------------------------------------------------
+141 tests passing.
+
 Working now:
-    event-table schema and validation, status decoding, tool registry with
-    generated JSON schemas, five KPI tools, the rule-based planner, the
-    orchestrator loop with retry and graceful degradation, the report
-    assembler, the trace log, the CLI, the synthetic generator with ground
-    truth, and the test suite.
+    event-table schema and validation, bitfield status decoding, the tool
+    registry with generated JSON schemas and enforced parameter types, six
+    KPI tools, BOTH planners (rule-based and a local Llama 3.2 3B through
+    Ollama, with automatic fallback), the orchestrator loop with cumulative
+    retry and graceful degradation, the report assembler, the trace log, the
+    CLI, plots and HTML/PDF export, the synthetic generator with ground
+    truth, the scaling benchmark, and the adapter for Person A's real event
+    table - verified against his actual pipeline on real telemetry.
 
 Not yet built:
-    Person A's real loader (src/ingestion/api.py is a stub), his statistical
-    tools, the LLM planner, plots, HTML and PDF export, and the scaling
-    benchmark.
+    Person A's cleaning stage (objective 2), his deduplication (objective 3),
+    his Cloud sync (objective 1 - Parquet persistence exists, the sync step
+    does not), and his statistical tools. src/ingestion/api.py is still a
+    stub; data.source: person_a is the working path in the meantime.
+
+Open question that matters:
+    The plant timezone is unconfirmed. See CONFIGURATION above and
+    docs/PROGRESS.md section 5.
