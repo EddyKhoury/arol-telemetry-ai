@@ -38,6 +38,16 @@ def faults(ground_truth):
 
 @pytest.fixture
 def cfg():
+    """The real config.yaml, with the two settings a test must never inherit
+    from the developer's machine pinned.
+
+    `planner` is pinned to rules because config.yaml is a live setting: the day
+    it was switched to `llm`, every Orchestrator test that did not pass a
+    planner explicitly started calling a real 3B model - slow, and no longer
+    deterministic. Tests that want the LLM planner build one themselves.
+    """
     conf = config_mod.load()
     conf["data"]["synthetic"] = {**conf["data"]["synthetic"], **SMALL}
+    conf["data"]["source"] = "synthetic"
+    conf.setdefault("agent", {})["planner"] = "rules"
     return conf

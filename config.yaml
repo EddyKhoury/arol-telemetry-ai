@@ -46,7 +46,7 @@ analytics:
   min_n: 30                     # below this, results are reported as not significant
 
 agent:
-  planner: rules                # rules | llm  (rules is the deterministic fallback)
+  planner: llm                  # rules | llm  (rules is the deterministic fallback)
   temperature: 0.0
   max_steps: 8
 

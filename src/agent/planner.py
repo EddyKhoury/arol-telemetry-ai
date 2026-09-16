@@ -19,7 +19,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from ..common import registry
+from ..common import registry, timeutils
 
 
 @dataclass
@@ -161,6 +161,10 @@ Choose one or more of the supplied tools that together answer the user's \
 question, and fill in only parameters the user actually specified. Omit any \
 parameter they did not mention rather than guessing a value.
 
+If the user names a specific head ("head 26", "H26"), call head_detail with \
+that head_id. The fleet-wide tools cannot report on a single head, so \
+answering with them would silently widen the question the user asked.
+
 If the question is not about capping telemetry, or is too vague to map onto a \
 tool, call no tools and reply with one short sentence saying what you need."""
 
@@ -207,6 +211,7 @@ class LLMPlanner(Planner):
         self.fallback = bool(llm.get("fallback_to_rules", True))
         self._rules = RulePlanner()
         self.last_error: str | None = None
+        self.dropped_args: list[str] = []
 
     # -- transport ---------------------------------------------------------
 
@@ -247,6 +252,7 @@ class LLMPlanner(Planner):
 
     def plan(self, query: str, context: dict) -> Plan:
         self.last_error = None
+        self.dropped_args = []
         try:
             specs = registry.get_tool_specs()
             reply = self._chat(query, _to_ollama_tools(specs))
@@ -266,6 +272,10 @@ class LLMPlanner(Planner):
 
             goal = (message.get("content") or "").strip() or \
                 f"Answer: {query.strip()}"
+            calls, named_head = self._honour_named_head(query, calls)
+            if named_head:
+                goal = (f"Assess head {named_head} and place it against "
+                        f"the rest of the fleet.")
             return Plan(goal=goal, calls=calls,
                         filters=dict(calls[0][1]) if calls else {},
                         rationale=f"{self.model} selected "
@@ -303,9 +313,64 @@ class LLMPlanner(Planner):
                     args = {}
             params, _ = registry.normalise_params(
                 {k: v for k, v in args.items() if v not in (None, "")})
-            calls.append((name, {k: v for k, v in params.items()
-                                 if k in spec.params}))
+            kept = {k: v for k, v in params.items() if k in spec.params}
+
+            # The planner DROPS what it cannot use; call_tool REJECTS it.
+            # The difference is deliberate: an argument from a 3B model is
+            # noise to be absorbed, so the answer still gets produced, while
+            # the same argument from Person A's code or a test is a bug that
+            # should be loud. Both record what happened.
+            kept, _notes, bad = registry.coerce_params(kept)
+            self.dropped_args.extend(bad)
+            calls.append((name, self._drop_unusable_bounds(kept)))
         return calls
+
+    def _honour_named_head(self, query: str, calls: list) -> tuple[list, str | None]:
+        """If the user named a head, make sure something reports on THAT head.
+
+        RulePlanner has done this since head_detail was written. The LLM
+        planner did not, and on the first live run "is anything wrong with
+        head 26?" came back as a fleet-wide anomaly scan - the same silently
+        widened question head_detail exists to fix, reintroduced through a
+        different planner.
+
+        The model's own calls are kept and head_detail is prepended, so the
+        report answers the question asked AND the wider one. Putting the rule
+        in the system prompt is not enough by itself: a 3B model follows an
+        instruction most of the time, not every time.
+        """
+        heads = [f"H{int(m):02d}" for m in HEAD_RE.findall(query)]
+        if not heads or registry.get("head_detail") is None:
+            return calls, None
+        if any(name == "head_detail" or params.get("head_id")
+               for name, params in calls):
+            return calls, None
+        head = heads[0] if len(heads) == 1 else heads
+        return [("head_detail", {"head_id": head})] + list(calls), head
+
+    def _drop_unusable_bounds(self, params: dict) -> dict:
+        """Remove start/end values the time parser cannot read.
+
+        A 3B model reaches for wall-clock language - `start="now"`,
+        `end="today"` - because that is how the question was phrased. Those
+        are not ISO-8601, so parse_bound raises and the tool fails.
+
+        They are dropped rather than resolved. "now" would resolve to the real
+        clock, and the pool it would be applied to is a February window, so
+        resolving is an empty result dressed up as an answer. Dropping widens
+        the window instead, which is the honest degradation: the report's
+        "filters applied" line then shows what was actually used.
+        """
+        out = {}
+        for key, value in params.items():
+            if key in ("start", "end"):
+                try:
+                    timeutils.parse_bound(value)
+                except ValueError:
+                    self.dropped_args.append(f"{key}={value!r} (not ISO-8601)")
+                    continue
+            out[key] = value
+        return out
 
 
 def get_planner(cfg) -> Planner:

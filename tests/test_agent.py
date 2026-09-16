@@ -161,3 +161,149 @@ def test_rule_planner_never_calls_an_unregistered_tool(cfg):
         for tool_name, params in planner.plan(query, {}).calls:
             assert R.get(tool_name) is not None, f"{tool_name} is not registered"
             assert set(params) <= set(R.get(tool_name).params)
+
+
+# --- bugs found by running the real model, not a mock ---------------------
+
+def test_two_bad_filters_are_relaxed_cumulatively(cfg, events):
+    """The first live run of the LLM planner set BOTH start and end to "now".
+
+    The old _retry dropped one filter, restored it, then dropped the next, so
+    every attempt still carried one impossible bound: three retries, three
+    identical failures, and a report with no findings. Relaxation has to be
+    cumulative.
+    """
+    from src.agent.planner import Plan
+
+    class _Fixed:
+        name = "rules"
+        def plan(self, query, context):
+            # A future start AND a past end. Each one empties the window on
+            # its own, so dropping either alone still fails - only dropping
+            # both recovers. start=2030/end=2030 would NOT test this: losing
+            # the start bound alone already reopens the whole pool.
+            return Plan(goal="g", calls=[("success_rate",
+                                          {"start": "2030-01-01",
+                                           "end": "2020-01-01"})])
+
+    agent = Orchestrator(cfg, planner=_Fixed())
+    answer = agent.answer("kpis")
+
+    assert answer["status"] == "ok", "cumulative relaxation should recover"
+    dropped = [s["dropped"] for s in answer["trace"].to_dict()["steps"]
+               if s["kind"] == "retry"]
+    assert dropped == ["start", "end"]
+    assert "retried without start, end" in answer["markdown"]
+
+
+def test_a_relative_time_word_is_dropped_before_dispatch(cfg, monkeypatch):
+    """`start="now"` is not ISO-8601, and resolving it against a February pool
+    would produce an empty window dressed up as an answer. It is dropped, and
+    the trace says so."""
+    from src.agent.planner import LLMPlanner
+
+    cfg["agent"]["llm"] = {"fallback_to_rules": True, "timeout_seconds": 1}
+    planner = LLMPlanner(cfg)
+    monkeypatch.setattr(planner, "_chat", lambda q, t: {"message": {
+        "content": "Ranking heads.",
+        "tool_calls": [{"function": {"name": "success_rate",
+                                     "arguments": {"start": "now",
+                                                   "end": "today",
+                                                   "bucket": "day"}}}]}})
+
+    plan = planner.plan("how are the heads doing now?", {})
+    assert plan.calls == [("success_rate", {"bucket": "day"})]
+    assert len(planner.dropped_args) == 2
+
+    answer = Orchestrator(cfg, planner=planner).answer("how are the heads now?")
+    assert answer["status"] == "ok"
+    assert any("dropped before dispatch" in n for n in answer["trace"].notes)
+
+
+def test_a_valid_bound_is_not_dropped(cfg, monkeypatch):
+    """The guard must only remove what the parser genuinely cannot read."""
+    from src.agent.planner import LLMPlanner
+
+    cfg["agent"]["llm"] = {"fallback_to_rules": True, "timeout_seconds": 1}
+    planner = LLMPlanner(cfg)
+    monkeypatch.setattr(planner, "_chat", lambda q, t: {"message": {
+        "tool_calls": [{"function": {"name": "success_rate",
+                                     "arguments": {"start": "2026-02-01"}}}]}})
+    assert planner.plan("kpis from february", {}).calls == [
+        ("success_rate", {"start": "2026-02-01"})]
+    assert planner.dropped_args == []
+
+
+def test_the_string_null_is_treated_as_not_supplied(cfg, monkeypatch):
+    """llama3.2:3b fills optional slots with the STRING "null" rather than
+    omitting the key. Taken literally that is a type error on every optional
+    argument, which killed three of the first six live questions."""
+    from src.agent.planner import LLMPlanner
+
+    cfg["agent"]["llm"] = {"fallback_to_rules": True, "timeout_seconds": 1}
+    planner = LLMPlanner(cfg)
+    monkeypatch.setattr(planner, "_chat", lambda q, t: {"message": {
+        "tool_calls": [{"function": {"name": "anomaly_heads",
+                                     "arguments": {"min_n": "null",
+                                                   "sigma": "null",
+                                                   "start": "None"}}}]}})
+    assert planner.plan("is anything wrong?", {}).calls == [("anomaly_heads", {})]
+
+
+def test_the_planner_absorbs_what_call_tool_rejects(cfg, events, monkeypatch):
+    """The split: model noise is absorbed so the answer still lands, but the
+    same argument arriving from code is a bug and stays loud."""
+    from src.agent.planner import LLMPlanner
+    from src.common import registry as R
+
+    cfg["agent"]["llm"] = {"fallback_to_rules": True, "timeout_seconds": 1}
+    planner = LLMPlanner(cfg)
+    monkeypatch.setattr(planner, "_chat", lambda q, t: {"message": {
+        "tool_calls": [{"function": {"name": "success_rate",
+                                     "arguments": {"min_n": "lots"}}}]}})
+
+    assert planner.plan("kpis", {}).calls == [("success_rate", {})]   # absorbed
+    assert planner.dropped_args                                       # and noted
+    assert R.call_tool("success_rate", events, min_n="lots")["ok"] is False  # loud
+
+
+def test_the_llm_planner_also_honours_a_named_head(cfg, monkeypatch):
+    """The rule planner has always done this. The LLM planner did not, so on
+    the first live run "is anything wrong with head 26?" came back as a
+    fleet-wide scan - the silently-widened question, reintroduced."""
+    from src.agent.planner import LLMPlanner
+
+    cfg["agent"]["llm"] = {"fallback_to_rules": True, "timeout_seconds": 1}
+    planner = LLMPlanner(cfg)
+    monkeypatch.setattr(planner, "_chat", lambda q, t: {"message": {
+        "tool_calls": [{"function": {"name": "anomaly_heads",
+                                     "arguments": {}}}]}})
+
+    plan = planner.plan("is anything wrong with head 26?", {})
+    assert plan.calls[0] == ("head_detail", {"head_id": "H26"})
+    assert [n for n, _ in plan.calls] == ["head_detail", "anomaly_heads"]
+    assert "H26" in plan.goal
+
+
+def test_a_head_the_model_already_handled_is_not_duplicated(cfg, monkeypatch):
+    from src.agent.planner import LLMPlanner
+
+    cfg["agent"]["llm"] = {"fallback_to_rules": True, "timeout_seconds": 1}
+    planner = LLMPlanner(cfg)
+    monkeypatch.setattr(planner, "_chat", lambda q, t: {"message": {
+        "tool_calls": [{"function": {"name": "head_detail",
+                                     "arguments": {"head_id": "H26"}}}]}})
+    assert planner.plan("anything wrong with head 26?", {}).calls == [
+        ("head_detail", {"head_id": "H26"})]
+
+
+def test_a_fleet_question_is_left_alone(cfg, monkeypatch):
+    """The guard must only fire when a head is actually named."""
+    from src.agent.planner import LLMPlanner
+
+    cfg["agent"]["llm"] = {"fallback_to_rules": True, "timeout_seconds": 1}
+    planner = LLMPlanner(cfg)
+    monkeypatch.setattr(planner, "_chat", lambda q, t: {"message": {
+        "tool_calls": [{"function": {"name": "anomaly_heads",
+                                     "arguments": {}}}]}})
+    assert planner.plan("is anything wrong?", {}).calls == [("anomaly_heads", {})]

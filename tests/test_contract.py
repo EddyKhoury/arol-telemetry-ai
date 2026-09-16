@@ -10,6 +10,7 @@ import json
 import polars as pl
 import pytest
 
+from src.analytics import kpi  # noqa: F401 - importing registers the tools
 from src.common import registry as R
 from src.common import schema
 from src.common.envelope import envelope, failure, jsonable
@@ -180,3 +181,55 @@ def test_meta_carries_what_the_trace_log_needs(events):
     meta = R.call_tool("success_rate", events)["meta"]
     for key in ("tool", "agent", "n", "params", "elapsed_ms", "data_window"):
         assert key in meta
+
+
+# --- declared types are enforced, not just advertised ---------------------
+
+def test_a_stringly_typed_integer_is_coerced(events):
+    """The registry tells the model min_n is an integer. The first live run of
+    llama3.2:3b answered "10". Nothing checked, so it reached the tool and
+    raised TypeError on `n < min_n` - an internals stack trace for what is
+    really a bad argument."""
+    out = R.call_tool("success_rate", events, min_n="10")
+    assert out["ok"] is True
+    assert any("min_n" in f for f in out["meta"]["filters_applied"])
+
+
+def test_a_bucket_synonym_is_mapped_onto_the_enum(events):
+    """'daily' is what a model says; 'day' is what the enum allows."""
+    out = R.call_tool("throughput", events, bucket="daily")
+    assert out["ok"] is True
+    assert any("bucket" in f for f in out["meta"]["filters_applied"])
+
+
+def test_a_value_outside_the_enum_is_refused_not_guessed(events):
+    out = R.call_tool("throughput", events, bucket="fortnight")
+    assert out["ok"] is False
+    assert "not one of" in out["error"]
+
+
+def test_an_uncoercible_number_fails_with_the_parameter_named(events):
+    """The error must name the argument, not the tool's internals."""
+    out = R.call_tool("success_rate", events, min_n="lots")
+    assert out["ok"] is False
+    assert "min_n" in out["error"] and "integer" in out["error"]
+    assert "TypeError" not in out["error"]
+
+
+def test_a_float_that_is_a_whole_number_is_accepted(events):
+    """JSON has no int/float distinction, so 10.0 is a legitimate integer."""
+    assert R.call_tool("success_rate", events, min_n=10.0)["ok"] is True
+    assert R.call_tool("success_rate", events, min_n=10.5)["ok"] is False
+
+
+def test_a_boolean_word_is_coerced(events):
+    out = R.call_tool("idle_periods", events, window_seconds="300")
+    assert out["ok"] is True
+
+
+def test_correctly_typed_arguments_are_left_alone(events):
+    """No note should be added when nothing needed changing."""
+    out = R.call_tool("success_rate", events, min_n=30, bucket="day")
+    assert out["ok"] is True
+    assert not [f for f in out["meta"].get("filters_applied", [])
+                if f.startswith("param type:")]

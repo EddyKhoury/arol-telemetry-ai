@@ -23,6 +23,16 @@ def planner(cfg):
     return LLMPlanner(cfg)
 
 
+def _ollama_is_running(host="http://localhost:11434") -> bool:
+    """Probe used only to skip the one live test below."""
+    import urllib.request
+    try:
+        urllib.request.urlopen(f"{host}/api/tags", timeout=2).read()
+        return True
+    except Exception:
+        return False
+
+
 def _reply(tool_calls=None, content=""):
     return {"message": {"content": content, "tool_calls": tool_calls or []}}
 
@@ -146,9 +156,22 @@ def test_the_fallback_can_be_switched_off(cfg, monkeypatch):
         planner.plan("kpis", {})
 
 
-def test_available_is_false_when_nothing_is_listening(planner):
-    """Real call, no mock - there is no Ollama on this machine."""
-    assert planner.available() is False
+def test_available_is_false_when_nothing_is_listening(cfg):
+    """Real call, no mock. Port 1 is privileged and never has a server on it,
+    so this holds whether or not Ollama is installed - the earlier version
+    asserted "no Ollama on this machine" and started failing the day one was.
+    """
+    cfg["agent"]["llm"] = {"host": "http://localhost:1", "model": "llama3.2:3b",
+                           "timeout_seconds": 2, "fallback_to_rules": True}
+    assert LLMPlanner(cfg).available() is False
+
+
+@pytest.mark.skipif(not _ollama_is_running(),
+                    reason="no local Ollama; the mocked tests cover the wiring")
+def test_available_is_true_against_a_real_server(planner):
+    """The live counterpart. Skipped on a machine without Ollama, so CI and a
+    fresh clone stay green, but it proves the probe on the demo machine."""
+    assert planner.available() is True
 
 
 def test_a_malformed_reply_falls_back(planner, monkeypatch):

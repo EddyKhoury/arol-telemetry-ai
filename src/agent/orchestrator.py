@@ -25,8 +25,10 @@ from . import report as report_mod
 from .planner import get_planner
 from .trace import Trace
 
-# Filters worth dropping on a retry, least destructive first.
-RELAXABLE = ("start", "end", "head_id")
+# Filters worth dropping on a retry, least destructive first. Dropping a time
+# bound only widens the window; dropping an identifier changes whose data is
+# being reported, so those come last.
+RELAXABLE = ("start", "end", "machine_id", "head_id")
 
 
 class Orchestrator:
@@ -53,6 +55,9 @@ class Orchestrator:
             trace.planner = f"{self.planner.name}->rules (fallback)"
             trace.note(f"{self.planner.name} planner unavailable "
                        f"({fallback_error}); routed by keyword rules instead")
+
+        for dropped in getattr(self.planner, "dropped_args", []) or []:
+            trace.note(f"planner proposed {dropped}; dropped before dispatch")
 
         trace.step("plan", goal=plan.goal, rationale=plan.rationale,
                    calls=[c[0] for c in plan.calls], filters=plan.filters,
@@ -128,20 +133,32 @@ class Orchestrator:
         }
 
     def _retry(self, tool_name, params, events, trace):
-        """Relax one filter at a time and try again, as diagram 02 requires."""
+        """Relax filters and try again, as diagram 02 requires.
+
+        Relaxation is CUMULATIVE: each attempt drops one more filter and keeps
+        the previous ones dropped. Dropping one at a time and restoring it was
+        the original version, and it could not recover from two bad filters at
+        once - which is exactly what a small model produces when it answers a
+        question about "now" by setting both start and end to "now". Three
+        retries, three identical failures.
+        """
+        relaxed = dict(params)
         for key in RELAXABLE:
-            if key not in params:
+            if key not in relaxed:
                 continue
-            relaxed = {k: v for k, v in params.items() if k != key}
-            trace.step("retry", tool=tool_name, dropped=key, params=relaxed)
+            dropped_now = relaxed.pop(key)
+            trace.step("retry", tool=tool_name, dropped=key, params=dict(relaxed))
             result = registry.call_tool(tool_name, events, **relaxed)
-            trace.tool_call(tool_name, relaxed, result)
+            trace.tool_call(tool_name, dict(relaxed), result)
             if result["ok"]:
+                gone = [k for k in params if k not in relaxed]
                 result["meta"]["notes"] = (
                     (result["meta"].get("notes") or "") +
-                    f" (retried without {key}; the original filter matched nothing)"
+                    f" (retried without {', '.join(gone)}; the original "
+                    f"filter matched nothing)"
                 ).strip()
                 return result
+            del dropped_now
         return None
 
     # -- delivery ----------------------------------------------------------

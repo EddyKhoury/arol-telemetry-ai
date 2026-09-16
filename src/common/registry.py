@@ -126,6 +126,110 @@ def normalise_params(params: dict) -> tuple[dict, list[str]]:
     return out, renames
 
 
+# Enum values a small model is likely to produce for `bucket`.
+_BUCKET_SYNONYMS = {"hourly": "hour", "hours": "hour", "daily": "day",
+                    "days": "day", "weekly": "week", "weeks": "week",
+                    "shifts": "shift", "per_shift": "shift"}
+
+_TRUTHY = {"true", "yes", "y", "1", "on"}
+_FALSY = {"false", "no", "n", "0", "off"}
+
+# A model asked for an optional argument it does not want to set will often
+# fill the slot with a placeholder rather than omit the key. llama3.2:3b sends
+# the STRING "null" for min_n and sigma. These mean "not supplied".
+_NULLISH = {"null", "none", "nil", "undefined", "n/a", "na", "nan", "-", ""}
+
+
+def _coerce_one(key: str, value, declared):
+    """Coerce one value to its declared JSON-Schema type.
+
+    Returns (value, note); raises ValueError with a readable message when the
+    value cannot be honoured at all.
+    """
+    types = declared if isinstance(declared, list) else [declared]
+
+    if "array" in types and isinstance(value, (list, tuple)):
+        return list(value), None
+
+    if "integer" in types or "number" in types:
+        if isinstance(value, bool):
+            raise ValueError(f"{key}={value!r} is a boolean, not a number")
+        want_int = "integer" in types
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            kind = "an integer" if want_int else "a number"
+            raise ValueError(f"{key}={value!r} is not {kind}") from None
+        if want_int:
+            if not number.is_integer():
+                raise ValueError(f"{key}={value!r} is not a whole number")
+            number = int(number)
+        if type(number) is type(value) and number == value:
+            return number, None
+        return number, f"{key} {value!r} coerced to {number!r}"
+
+    if "boolean" in types:
+        if isinstance(value, bool):
+            return value, None
+        text = str(value).strip().lower()
+        if text in _TRUTHY:
+            return True, f"{key} {value!r} coerced to True"
+        if text in _FALSY:
+            return False, f"{key} {value!r} coerced to False"
+        raise ValueError(f"{key}={value!r} is not a boolean")
+
+    if "string" in types:
+        text = value if isinstance(value, str) else str(value)
+        enum = PARAM_VOCABULARY.get(key, {}).get("enum")
+        if enum:
+            lowered = text.strip().lower()
+            mapped = _BUCKET_SYNONYMS.get(lowered, lowered)
+            if mapped not in enum:
+                raise ValueError(f"{key}={value!r} is not one of {enum}")
+            if mapped == value:
+                return mapped, None
+            return mapped, f"{key} {value!r} coerced to {mapped!r}"
+        if text == value:
+            return text, None
+        return text, f"{key} {value!r} coerced to a string"
+
+    return value, None
+
+
+def coerce_params(params: dict) -> tuple[dict, list[str], list[str]]:
+    """Enforce the types the tool schemas advertise to the planner.
+
+    The registry hands the model a JSON Schema saying `min_n` is an integer,
+    and then never checked what came back. The first live run of a 3B model
+    answered with the STRING "10", which sailed through dispatch and died
+    inside the tool as `TypeError: not supported between int and str` - a
+    stack trace about the tool's internals for what is really a bad argument.
+
+    A declared type that is never enforced is a comment. Returns
+    (params, notes, errors).
+    """
+    out: dict = {}
+    notes: list[str] = []
+    errors: list[str] = []
+    for key, value in params.items():
+        if isinstance(value, str) and value.strip().lower() in _NULLISH:
+            notes.append(f"{key}={value!r} treated as not supplied")
+            continue
+        declared = PARAM_VOCABULARY.get(key, {}).get("type")
+        if declared is None:
+            out[key] = value
+            continue
+        try:
+            coerced, note = _coerce_one(key, value, declared)
+        except ValueError as exc:
+            errors.append(str(exc))
+            continue
+        out[key] = coerced
+        if note:
+            notes.append(note)
+    return out, notes, errors
+
+
 def get_tool_specs(agent: str | None = None) -> list[dict]:
     """Tool definitions for the planner, optionally filtered to one agent."""
     return [s.json_schema() for s in _REGISTRY.values()
@@ -155,6 +259,10 @@ def call_tool(name: str, events, **params) -> dict:
         )
 
     params, renames = normalise_params(params)
+    params, coercions, type_errors = coerce_params(params)
+    if type_errors:
+        return env.failure(f"{name}: " + "; ".join(type_errors),
+                           tool=name, params=params)
     unknown = [p for p in params if p not in spec.params]
     if unknown:
         return env.failure(
@@ -185,7 +293,9 @@ def call_tool(name: str, events, **params) -> dict:
     meta["agent"] = spec.agent
     meta["params"] = env.jsonable(params)
     meta["elapsed_ms"] = round(timer.ms, 2)
-    if renames:
-        meta["filters_applied"] = list(meta.get("filters_applied", [])) + \
-            [f"param alias {r}" for r in renames]
+    if renames or coercions:
+        applied = list(meta.get("filters_applied", []))
+        applied += [f"param alias {r}" for r in renames]
+        applied += [f"param type: {c}" for c in coercions]
+        meta["filters_applied"] = applied
     return result
