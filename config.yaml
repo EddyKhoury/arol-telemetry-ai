@@ -10,9 +10,17 @@
 schema_version: "1.0"
 
 data:
-  # synthetic -> src/testing/synth.py   |   real -> src/ingestion/api.py
+  # synthetic -> src/testing/synth.py
+  # person_a  -> Person A's Parquet event table, via src/ingestion/adapter.py
+  # real      -> src/ingestion/api.py (his loader, when it lands)
   # This one key is the Phase-5 swap. Nothing else changes.
   source: synthetic
+
+  # Event tables produced by Person A's write_event_table_parquet. His frame
+  # carries 8 of the contract's 12 columns and types status Int64; the adapter
+  # converts and declares what it could not recover. Used when source: person_a
+  person_a:
+    feb: cache/person_a_feb.parquet
 
   # Plant-local timezone the raw timestamps are recorded in. Reported in
   # pool_meta; never applied to the values themselves (audit F5).
