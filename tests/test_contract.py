@@ -97,9 +97,19 @@ def test_validate_rejects_a_missing_column(events):
 
 
 def test_validate_rejects_a_wrong_dtype(events):
-    broken = events.with_columns(pl.col("status").cast(pl.Int64))
+    """Pick a width that differs from the contract's, whatever the contract's
+    currently is. Hardcoding a rival dtype breaks the moment STATUS_DTYPE
+    changes to it - which is the whole point of that constant being movable."""
+    other = pl.Int32 if schema.STATUS_DTYPE != pl.Int32 else pl.Int64
+    broken = events.with_columns(pl.col("status").cast(other))
     problems = schema.validate_events(broken, strict=False)
     assert any("status" in p for p in problems)
+
+
+def test_the_status_width_is_declared_in_exactly_one_place():
+    """`if he decided 32 bits then it is 32 bits` - following Person A on the
+    shared columns has to be a one-line change, not a hunt through nine casts."""
+    assert schema.EVENT_COLUMNS["status"] is schema.STATUS_DTYPE
 
 
 def test_validate_rejects_tz_aware_timestamps(events):

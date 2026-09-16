@@ -120,7 +120,8 @@ def build_events(files) -> pl.DataFrame:
                     pl.col("timestamp").cast(pl.Datetime("us")).alias("ts"),
                     (pl.col(f"{head} Count") - pl.col(f"{head} Count").shift(1)).alias("__d"),
                     pl.col(f"{head} AppTorque").cast(pl.Float64).alias("torque"),
-                    pl.col(f"{head} Status").cast(pl.Int16).alias("status"))
+                    pl.col(f"{head} Status")
+                      .cast(schema.STATUS_DTYPE).alias("status"))
                 .filter(pl.col("__d") > 0)
                 .with_columns(
                     pl.lit("bench", dtype=pl.String).alias("pool_id"),

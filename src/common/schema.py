@@ -23,6 +23,21 @@ import polars as pl
 # stamp it; the conformance test asserts they agree.
 SCHEMA_VERSION = "1.0"
 
+# THE STATUS WIDTH LIVES HERE AND NOWHERE ELSE.
+#
+# Person A's pipeline emits Int64 (his EVENT_SCHEMA), and this project follows
+# his choice on the shared columns rather than making him convert to ours.
+# Changing it is a one-line edit here: every cast in src/ and tests/ reads
+# this constant, so Int16, Int32 and Int64 are all a single change away.
+#
+# It was Int16 originally, chosen when the only observed codes were 0, 2 and
+# 65. Int16 is the one width with a real failure mode: Polars WRAPS on a
+# narrowing cast, so a code above 32767 would become negative and decode as a
+# nonsense category rather than failing. At 765k rows per machine-day the
+# difference between Int16 and Int64 is about 4.5 MB, which buys nothing worth
+# that risk. Matching him also removes a conversion from the seam entirely.
+STATUS_DTYPE: pl.DataType = pl.Int64
+
 # Column -> Polars dtype. Order is the canonical column order.
 # Datetime("us") matches Person A's EVENT_SCHEMA; every timestamp in the real
 # telemetry is a whole second, so the unit costs no precision either way.
@@ -33,7 +48,7 @@ EVENT_COLUMNS: dict[str, pl.DataType] = {
     "head_id":       pl.String,          # "H01".."H36"
     "head_index":    pl.Int16,           # 1..36, for correct numeric sort order
     "torque":        pl.Float64,         # H## AppTorque on the increment row, Nm
-    "status":        pl.Int16,           # H## Status on the increment row, raw code
+    "status":        STATUS_DTYPE,       # H## Status on increment row; see STATUS_DTYPE
     "error_class":   pl.String,          # decoded from status
     "reject_signal": pl.Boolean,         # status bit 0
     "cap_present":   pl.Boolean,         # True / False / null - null = not knowable
@@ -137,7 +152,7 @@ def decode_status_series(status) -> pl.DataFrame:
     row order as the input.
     """
     series = status if isinstance(status, pl.Series) else pl.Series("status", list(status))
-    frame = pl.DataFrame({"status": series.cast(pl.Int16)})
+    frame = pl.DataFrame({"status": series.cast(STATUS_DTYPE)})
     category = _category(pl.col("status"))
     return frame.select(
         pl.coalesce(

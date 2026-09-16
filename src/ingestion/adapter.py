@@ -2,9 +2,13 @@
 
 Person A's WP1 pipeline is real and working (his repo, `event_table_polars.py`)
 but it emits 8 columns where `common/schema.py` specifies 12, and it types
-`status` as Int64 where the contract says Int16. Rather than ask him to change
-a working pipeline mid-project - or worse, change the contract to whatever his
-code happens to produce - this module converts.
+one of them under a different name. Rather than ask him to change a working
+pipeline mid-project, this module converts.
+
+The status width is NO LONGER one of the gaps: the contract now follows his
+Int64 (see schema.STATUS_DTYPE), so that column passes through unchanged. The
+cast below is kept and still range-checked, because the contract width is a
+one-line change and a future narrowing must fail loudly rather than wrap.
 
     A's frame (8 cols)  ->  adapt()  ->  contract frame (12 cols)
 
@@ -19,7 +23,7 @@ already in the frame or known by the caller:
 
     pool_id     the caller asked for a specific pool, so it knows the answer
     head_index  parsed from head_id ("H07" -> 7), for correct numeric sort
-    status      Int64 -> Int16, with a range check (see below)
+    status      cast to schema.STATUS_DTYPE, range-checked (see below)
 
 The fourth is NOT recoverable, and this is the important one. His closure
 detector filters `__count_delta == 1` before the event table is built, so rows
@@ -29,11 +33,11 @@ count_delta=1 / inferred=False, which is *true of every row it is given*, and
 raises the loss in `notes` so the report can state it. A number this module
 cannot see is a number it must not invent.
 
-The Int16 cast is checked rather than assumed. Polars casts out-of-range
-integers by wrapping, so a status of 40000 would silently become a negative
-number and decode as a nonsense category. The contract picked Int16 when the
-only observed codes were 0/2/65; if a grading dataset ever exceeds it, this
-raises instead of quietly corrupting the column.
+The status cast is checked rather than assumed. Polars casts out-of-range
+integers by WRAPPING, so under a narrow width a status of 40000 would silently
+become a negative number and decode as a nonsense category. With Int64 the
+check can never fire; it is kept because STATUS_DTYPE is a one-line change and
+the day someone narrows it, this must fail loudly rather than corrupt a column.
 """
 
 from __future__ import annotations
@@ -61,7 +65,18 @@ SUPPLIED_BY_ADAPTER = ("pool_id", "head_index", "count_delta", "inferred")
 
 _HEAD_DIGITS = re.compile(r"(\d+)")
 
-_INT16_MIN, _INT16_MAX = -32768, 32767
+# Representable range of the contract's status dtype, derived rather than
+# hardcoded, so narrowing STATUS_DTYPE keeps the guard honest.
+_INT_RANGES = {
+    pl.Int8: (-128, 127),
+    pl.Int16: (-32768, 32767),
+    pl.Int32: (-2147483648, 2147483647),
+    pl.Int64: (-9223372036854775808, 9223372036854775807),
+}
+
+
+def _status_range() -> tuple[int, int]:
+    return _INT_RANGES.get(schema.STATUS_DTYPE, _INT_RANGES[pl.Int64])
 
 
 class AdapterError(ValueError):
@@ -103,15 +118,15 @@ def adapt(events, *, pool_id: str, redecode: bool = True
         return schema.empty_events(), ["source event table was empty"]
 
     # --- the checked narrowing cast -------------------------------------
+    low, high = _status_range()
     status_min = frame["status"].min()
     status_max = frame["status"].max()
-    if status_min is not None and (status_min < _INT16_MIN or
-                                   status_max > _INT16_MAX):
+    if status_min is not None and (status_min < low or status_max > high):
         raise AdapterError(
-            f"status range [{status_min}, {status_max}] does not fit Int16; "
-            f"casting would wrap and decode as a nonsense category. "
-            f"Widen EVENT_COLUMNS['status'] to Int32 with Person A "
-            f"(contract section 7.3 - a schema change needs both of us).")
+            f"status range [{status_min}, {status_max}] does not fit "
+            f"{schema.STATUS_DTYPE}; casting would wrap and decode as a "
+            f"nonsense category. Widen schema.STATUS_DTYPE with Person A "
+            f"(a schema change needs both signatures).")
 
     out = frame.with_columns(
         pl.lit(pool_id, dtype=pl.String).alias("pool_id"),
@@ -119,7 +134,7 @@ def adapt(events, *, pool_id: str, redecode: bool = True
         # True of every row A emits: his detector keeps only delta == 1.
         pl.lit(1, dtype=pl.Int32).alias("count_delta"),
         pl.lit(False, dtype=pl.Boolean).alias("inferred"),
-        pl.col("status").cast(pl.Int16).alias("status"),
+        pl.col("status").cast(schema.STATUS_DTYPE).alias("status"),
     )
 
     unparsed = out.filter(pl.col("head_index").is_null()).height

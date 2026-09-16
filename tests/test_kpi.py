@@ -29,7 +29,7 @@ def _frame(statuses, head="H01", start="2026-02-01 00:00:00", step_s=6):
         "head_id": pl.Series([head] * n, dtype=pl.String),
         "head_index": pl.Series([1] * n, dtype=pl.Int16),
         "torque": pl.Series([2.0] * n, dtype=pl.Float64),
-        "status": pl.Series(statuses, dtype=pl.Int16),
+        "status": pl.Series(statuses, dtype=schema.STATUS_DTYPE),
         "count_delta": pl.Series([1] * n, dtype=pl.Int32),
         "inferred": pl.Series([False] * n, dtype=pl.Boolean),
     })

@@ -67,17 +67,31 @@ def test_head_index_sorts_numerically_not_lexically():
 
 def test_status_is_narrowed_to_the_contract_dtype():
     frame, _ = adapter.adapt(_person_a_frame([0, 2, 65]), pool_id="feb")
-    assert frame.schema["status"] == pl.Int16
+    assert frame.schema["status"] == schema.STATUS_DTYPE
 
 
-def test_an_out_of_range_status_raises_instead_of_wrapping():
-    """Polars wraps on a narrowing cast, so 40000 would become a negative
-    number and decode as a nonsense category. Silent corruption is the one
-    outcome the adapter must never produce."""
+def test_an_out_of_range_status_raises_instead_of_wrapping(monkeypatch):
+    """Polars WRAPS on a narrowing cast, so under a narrow width 40000 becomes
+    a negative number and decodes as a nonsense category.
+
+    The contract now follows Person A's Int64, so this guard cannot fire in
+    practice - which is exactly why it needs a test. STATUS_DTYPE is a
+    one-line change; the day someone narrows it, this must fail loudly rather
+    than corrupt a column.
+    """
+    monkeypatch.setattr(schema, "STATUS_DTYPE", pl.Int16)
     frame = _person_a_frame([0]).with_columns(
         pl.lit(40000, dtype=pl.Int64).alias("status"))
-    with pytest.raises(adapter.AdapterError, match="does not fit Int16"):
+    with pytest.raises(adapter.AdapterError, match="does not fit"):
         adapter.adapt(frame, pool_id="feb")
+
+
+def test_the_current_width_accepts_every_real_code():
+    """Under the contract's actual dtype, nothing observed in AROL's table -
+    or any plausible extension of it - trips the guard."""
+    frame = _person_a_frame([0, 2, 4, 8, 9, 16, 32, 64, 65, 255])
+    out, _ = adapter.adapt(frame, pool_id="feb")
+    assert out.schema["status"] == schema.STATUS_DTYPE
 
 
 def test_the_dropped_closures_are_declared_not_hidden():
@@ -163,7 +177,14 @@ def test_person_as_real_pipeline_output_conforms(tmp_path):
     his = pl.read_parquet(parquet)
     assert list(his.columns) == list(adapter.PERSON_A_COLUMNS), \
         f"his event schema changed: {his.columns}"
-    assert his.schema["status"] == pl.Int64, "the Int64/Int16 gap closed?"
+    # The contract follows his width, so this is agreement rather than a gap.
+    # This failing is the SIGNAL, not the problem: it means the two sides have
+    # drifted apart, and it names which way.
+    assert his.schema["status"] == schema.STATUS_DTYPE, (
+        f"status width drift: Person A emits {his.schema['status']}, the "
+        f"contract says {schema.STATUS_DTYPE}. Follow him - set "
+        f"schema.STATUS_DTYPE to {his.schema['status']} - or agree the change "
+        f"with him first.")
 
     events, notes = adapter.adapt(his, pool_id="feb")
     assert schema.validate_events(events, strict=False) == []
