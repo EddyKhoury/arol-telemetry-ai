@@ -180,7 +180,8 @@ def assemble(query, plan, results, pool_meta, trace, *, min_n=30) -> str:
         f"source, {pool_meta.get('n_events', 0):,} closure events "
         f"across {len(pool_meta.get('heads', []))} heads.",
         f"- Window {pool_meta.get('ts_min')} to {pool_meta.get('ts_max')} "
-        f"(plant-local, {pool_meta.get('timezone')}).",
+        f"(plant-local, "
+        f"{pool_meta.get('timezone') or 'timezone unconfirmed'}).",
         f"- Machines: {', '.join(pool_meta.get('machines', [])) or 'n/a'}.",
     ]
     if pool_meta.get("rows_read") is not None:

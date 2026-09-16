@@ -152,8 +152,10 @@ retry against.
        |
        v  execute tools ........ structured results only
        |
-       +--> empty / error? ----> retry, relaxing ONE filter at a time
-       |                          (start, then end, then head_id)
+       +--> empty / error? ----> retry, relaxing filters CUMULATIVELY
+       |                          (start, then +end, then +machine_id,
+       |                           then +head_id - each keeps the
+       |                           previous ones dropped)
        v  validate ............. ok / partial / degraded
        v  assemble report ...... six mandated sections
        v  deliver .............. markdown, figures, HTML/PDF, trace log
@@ -197,13 +199,100 @@ It names tools and arguments. It never computes. So a misrouted question yields
 the **wrong analysis**, never a **wrong number**. A small local model's typical
 failures are absorbed before dispatch:
 
+Every row below was observed from llama3.2:3b on the first six live
+questions, not imagined:
+
 | the model does | the system does |
-|---|---|
+|---|---|---|
 | invents a tool name | dropped before dispatch |
 | invents a parameter | dropped |
 | says `head` not `head_id` | alias table normalises it |
-| returns null arguments | stripped |
+| sends `min_n="10"` as a string | coerced to `10` against the declared schema type |
+| sends `bucket="daily"` | mapped onto the enum value `day` |
+| fills optional slots with the string `"null"` | treated as not supplied |
+| sets `start` and `end` to `"now"` | dropped: unresolvable against a February pool |
+| names `MCC777` when the machine is `MCC777-01` | filter relaxed on retry, disclosed in the report |
+| answers "is head 26 bad?" fleet-wide | `head_detail` prepended for H26 |
 | server unreachable | keyword fallback, declared in the report |
+
+**The planner drops what it cannot use; `call_tool` rejects it.** The split is
+deliberate: a bad argument from a 3B model is noise to absorb so the answer
+still lands, while the same argument arriving from Person A's code or a test is
+a bug that should be loud. Both paths record what happened.
+
+A declared type that is never enforced is a comment. The registry advertised
+JSON-Schema types to the model for weeks and checked none of them coming
+back — which surfaced the moment a real model, rather than a mock, answered.
+
+---
+
+## 6b. The A/B seam in practice — `src/ingestion/adapter.py`
+
+The contract said 12 columns. Person A's working pipeline emits 8, and types
+`status` as Int64 rather than Int16. Three options existed: make him change a
+working pipeline, bend the contract to whatever his code emits, or convert.
+
+**Converting is the only one that costs nobody anything**, so the adapter
+translates and — more importantly — declares what it *cannot* translate.
+
+| gap | adapter's answer |
+|---|---|
+| `pool_id` missing | the caller asked for a pool, so it knows |
+| `head_index` missing | parsed from `head_id`, for numeric not lexical sort |
+| `status` Int64 vs Int16 | cast, **range-checked first** |
+| `count_delta` / `inferred` missing | set to 1 / False, **and the loss declared** |
+
+Two of those deserve the emphasis.
+
+**The cast is checked, not assumed.** Polars wraps on a narrowing cast, so a
+status of 40000 would silently become negative and decode as a nonsense
+category. The adapter raises instead. Silent corruption is the one outcome it
+must never produce.
+
+**The dropped closures cannot be recovered, so they are reported.** His closure
+detector filters `__count_delta == 1` before the event table exists, so counter
+jumps never reach us. `count_delta = 1` is true of every row the adapter is
+given — but the rows that are missing are missing upstream. That loss goes into
+`pool_meta["warnings"]`, and therefore into every report's "data used" section.
+A number this module cannot see is a number it must not invent.
+
+The adapter also **re-decodes `status` with the contract's own decoder** rather
+than trusting his three decoded columns, and reports disagreements rather than
+silently preferring one side. His decoder and ours were written independently
+from the same AROL table, so a mismatch would be a real finding about the
+integration.
+
+### Verified on his actual code, on real telemetry
+
+| | |
+|---|---|
+| His pipeline | 765,703 events |
+| Our independent reshape of the same day | 765,711 events |
+| Difference | **exactly 8** — precisely the counter jumps his filter drops |
+| Status decoding disagreements | **0** across 765,703 events |
+| Torque / status on shared closures | identical |
+
+Both repos name their top-level package `src`, so his modules cannot be
+imported into this process at all. `tests/person_a_bridge.py` runs his pipeline
+in a subprocess with `cwd` set to his repo and hands back Parquet — which is
+also the honest shape of the integration, since he already ships
+`write_event_table_parquet`. Nothing writes to his repo.
+
+`data.source: person_a` makes this the live path, so the CLI answers questions
+about real telemetry today rather than only in a test.
+
+### Still open, and it is his to close
+
+The real February file spans `2026-01-31T16:00:06` to `2026-02-01T15:59:59`,
+and hours 17–21 in file time are ~100% No Load while 09–15 are the busiest.
+Under UTC+8 the 16:00 boundary *is* local midnight and the idle block falls at
+01:00–05:00 local — a night break, which is coherent. Under `Europe/Rome` the
+file would span 17:00–17:00 local, which is not a plant day boundary at all.
+
+The evidence points to roughly UTC+8. It is not proof, so `data.timezone` is
+`null` and every report prints "timezone unconfirmed" rather than a guess —
+the string is printed as fact, so it had better be one. Every per-day and
+per-shift KPI depends on Person A confirming this with AROL.
 
 ---
 
@@ -247,9 +336,31 @@ but what actually ran is written down.
 | | |
 |---|---|
 | pandas → Polars migration | 9.56 s → 0.60 s, 178 MB → 33 MB per machine-day |
-| Agent vs monolithic script, 4 day-files | 80.5 s → 3.9 s (20.6×); speedup grows with volume |
-| Five questions instead of one | 402 s → 5.7 s (≈71×) — the monolith re-pays per question |
-| Analysis over 765,711 real closures | 180 ms |
-| Test suite | 107 tests |
+| Agent vs monolithic script, 4 day-files | 27.7 s → 1.34 s (**20.6×**) |
+| Same, one day-file | 8.04 s → 0.32 s (**25.1×**) |
+| Five questions instead of one, 4 day-files | 138.6 s → 2.31 s (**60×**) |
+| Analysis over 765,711 real closures | 320 ms |
+| Test suite | 141 tests |
+
+**The per-question speedup does not grow with volume** — it drifts *down*,
+25.1× → 24.5× → 20.6× as Polars' parallelism saturates and the monolith's
+fixed startup cost is amortised over more rows. An earlier draft of this
+document claimed it grew, from reading the first measurement and stopping.
+
+What scales is the cost of **asking more**:
+
+| day-files | monolith, 5 questions vs 1 | agent, 5 questions vs 1 |
+|---|---|---|
+| 1 | 5.00× | 1.42× |
+| 2 | 5.00× | 1.64× |
+| 4 | 5.00× | 1.72× |
+
+The monolith costs *exactly* 5.00× for five questions at every size — perfectly
+linear, because there is nothing to reuse between them. The agent costs 1.4–1.7×,
+because the reshape happens once and each further question is milliseconds of
+columnar aggregation. That is the objective-5 claim, and it is an architectural
+property rather than a tuning result: an interactive agent is asked *many*
+questions of *one* dataset, which is precisely the regime where a monolithic
+script degrades fastest.
 
 Full method and tables: `docs/benchmark.md`.

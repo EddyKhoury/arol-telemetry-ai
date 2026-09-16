@@ -24,7 +24,20 @@ data:
 
   # Plant-local timezone the raw timestamps are recorded in. Reported in
   # pool_meta; never applied to the values themselves (audit F5).
-  timezone: Europe/Rome
+  #
+  # UNCONFIRMED - and deliberately null rather than a guess, because this
+  # string is printed in every report's "data used" section as fact.
+  #
+  # The real February file spans 2026-01-31T16:00:06 to 2026-02-01T15:59:59,
+  # and hours 17-21 in file time are ~100% No Load while 09-15 are the busiest.
+  # Under UTC+8 the 16:00 boundary IS local midnight and the idle block falls
+  # at 01:00-05:00 local - a night break, which is coherent. Under Europe/Rome
+  # the file would span 17:00-17:00 local, which is not a plant day boundary
+  # at all. The evidence points to roughly UTC+8; it is not proof.
+  #
+  # Person A must confirm this with AROL. Every per-day and per-shift KPI
+  # depends on it, and a wrong boundary moves closures across midnight.
+  timezone: null
 
   # A pool is an ordered list of day-files for one machine, processed as one
   # continuous counter stream. Fill in when Person A shares the CSVs.

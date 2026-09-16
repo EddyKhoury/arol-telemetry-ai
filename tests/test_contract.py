@@ -233,3 +233,22 @@ def test_correctly_typed_arguments_are_left_alone(events):
     assert out["ok"] is True
     assert not [f for f in out["meta"].get("filters_applied", [])
                 if f.startswith("param type:")]
+
+
+def test_status_9_from_the_real_data_decodes_correctly():
+    """Found by the scaling benchmark on 4 real day-files: two status-9 events
+    on 2026-02-04, 16 seconds apart on H27 and H17.
+
+    Nobody had seen a code outside {0, 2, 65} before. The bitfield reading
+    handled it with no change: 9 == 8|1, so No InTorque with the reject bit
+    set. An enum would have returned "Unknown (9)".
+
+    It also justifies the tri-state cap_present: a No InTorque event does not
+    say whether a cap was in the head, and guessing True would have put both
+    events into the success-rate denominator.
+    """
+    got = schema.decode_status(9)
+    assert got["error_class"] == "No InTorque"
+    assert got["reject_signal"] is True
+    assert got["cap_present"] is None
+    assert got["confirmed"] is False       # real, but not in our vouched set

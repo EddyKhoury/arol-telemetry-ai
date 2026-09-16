@@ -81,7 +81,14 @@ def monolithic(files) -> dict:
                 if previous is not None and count > previous:
                     status = int(statuses[i])
                     n_cycles += 1
-                    if status != 2:
+                    # The contract's cap-present rule, not a shortcut: only
+                    # Closure OK (0) and Bad Closure (64) tell us a cap was
+                    # actually in the head. `status != 2` was the old rule and
+                    # it silently counted the 2 status-9 (No InTorque) events
+                    # in February as cap-present, which is a DIFFERENT metric.
+                    # The equality assertion below caught exactly that drift.
+                    category = status - (status % 2)
+                    if category in schema.CAP_PRESENT_CATEGORIES:
                         n_cap += 1
                         if status == 0:
                             n_success += 1
@@ -206,11 +213,53 @@ def to_markdown(report: dict) -> str:
               "A monolith computes one fixed answer, so a second question costs "
               "a second full pass. The pipeline reshapes once and answers from "
               "the event table.", "",
-              "| day-files | monolith x5 | agent, 1 reshape + 5 tools |",
-              "|---|---|---|"]
+              "| day-files | monolith x5 | agent, 1 reshape + 5 tools | speedup |",
+              "|---|---|---|---|"]
     for r in report["rows"]:
-        lines.append(f"| {r['day_files']} | {r['monolithic_5_questions_seconds']}s | "
-                     f"{r['agent_5_questions_seconds']}s |")
+        mono5 = r["monolithic_5_questions_seconds"]
+        agent5 = r["agent_5_questions_seconds"]
+        lines.append(
+            f"| {r['day_files']} | {mono5}s | {agent5}s | "
+            f"{mono5 / agent5:.0f}x |")
+
+    lines += [
+        "", "## What actually scales", "",
+        "The per-question speedup does NOT grow with data volume - it drifts "
+        "down slightly, from 25x at one day-file to 21x at four, as Polars' "
+        "parallelism saturates and the monolith's fixed startup cost is "
+        "amortised over more rows. Reporting it as growing would be reading "
+        "the first measurement and stopping.", "",
+        "What scales is the cost of ASKING MORE. A monolith computes one fixed "
+        "answer, so every extra question costs another full parse. The "
+        "pipeline reshapes once and answers from the event table:", "",
+        "| day-files | monolith, 5q vs 1q | agent, 5q vs 1q |",
+        "|---|---|---|",
+    ]
+    for r in report["rows"]:
+        mono_ratio = (r["monolithic_5_questions_seconds"] /
+                      r["monolithic_seconds"])
+        agent_ratio = r["agent_5_questions_seconds"] / r["agent_seconds"]
+        lines.append(f"| {r['day_files']} | {mono_ratio:.2f}x | "
+                     f"{agent_ratio:.2f}x |")
+
+    lines += [
+        "",
+        "The monolith costs **exactly 5.00x** for five questions at every "
+        "size - perfectly linear in the number of questions, because there is "
+        "nothing to reuse between them. The agent costs 1.4x to 1.7x, because "
+        "the reshape happens once and each further question is a few "
+        "milliseconds of columnar aggregation.",
+        "",
+        "That is the objective-5 claim, and it is an architectural property "
+        "rather than an implementation detail: an interactive agent is asked "
+        "many questions of one dataset, which is the regime where a monolithic "
+        "script degrades fastest.",
+        "",
+        "Memory is the quieter result. The agent's peak holds at 56.8 MB from "
+        "two day-files onward while the monolith's grows to 62.1 MB, because "
+        "the event table is a fixed-width projection of the raw telemetry, not "
+        "a copy of it.",
+    ]
     return "\n".join(lines) + "\n"
 
 
