@@ -1,0 +1,12 @@
+{
+  "mode": "polars_csv",
+  "files": 3,
+  "input_rows": 259198,
+  "input_bytes": 173627678,
+  "validation_valid": false,
+  "event_count": 2290224,
+  "scan_setup_seconds": 0.002560458960942924,
+  "validation_seconds": 0.18221558397635818,
+  "event_build_seconds": 0.15440833399770781,
+  "total_seconds": 0.3391864169971086
+}

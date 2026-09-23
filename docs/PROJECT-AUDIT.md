@@ -4599,3 +4599,1435 @@ M6 — Integration
 8. Only after the benchmark/parity gate should pandas removal be reconsidered.
 9. Only after the benchmark/parity gate should Step 10 analytics begin.
 10. Update this audit with the measured benchmark results.
+
+
+---
+
+# 106. M2.5 benchmark/parity gate — COMPLETE
+
+**Date:** 2026-09-12
+
+The mandatory real-data benchmark and parity gate required before Step 10 has now
+been completed successfully.
+
+The production path was evaluated against the original pandas reference using
+real AROL telemetry from machine `MCC777`.
+
+The benchmark compared:
+
+```text
+A. pandas + CSV reference
+B. Polars + CSV
+C. Polars + Parquet
+```
+
+Correctness and performance were checked together.
+
+---
+
+# 107. Real dataset used
+
+## One-day dataset
+
+```text
+file:
+data/telemetry_MCC777eda3db57348ef8a3113a642ae74db_2026-02-01.csv
+
+files:          1
+input rows:     86,399
+CSV bytes:      57,176,271
+Parquet bytes:   1,719,462
+events:         765,703
+```
+
+## Three-day stitched dataset
+
+Consecutive files:
+
+```text
+2026-02-01
+2026-02-02
+2026-02-03
+```
+
+Measured input:
+
+```text
+files:           3
+input rows:      259,198
+CSV bytes:       173,627,678
+Parquet bytes:     5,242,408
+events:          2,290,224
+```
+
+The three-day benchmark exercises real stitched-file boundaries from the same
+machine.
+
+---
+
+# 108. CSV → Parquet conversion evidence
+
+## One day
+
+```text
+input bytes:          57,176,271
+output bytes:          1,719,462
+conversion seconds:       0.0365
+compression ratio:       ~33.3x smaller
+size reduction:          ~97.0%
+```
+
+## Three days
+
+```text
+input bytes:         173,627,678
+output bytes:          5,242,408
+conversion seconds:       0.1108
+compression ratio:       ~33.1x smaller
+size reduction:          ~97.0%
+```
+
+Parquet is therefore retained as the canonical persisted working/event format.
+
+---
+
+# 109. One-day performance benchmark
+
+The pandas reference measurement used the real one-day file and produced:
+
+```text
+mode:                 pandas + CSV
+rows:                 86,399
+events:               765,703
+validation_valid:     false
+total seconds:        210.2241
+event-build seconds:  209.9511
+peak RSS:             801,128,448 bytes
+peak RSS:             ~764.0 MiB
+```
+
+Three optimized measurements were collected for each production mode. The median
+is used below.
+
+## Polars + CSV median
+
+```text
+total seconds:        0.1851
+event-build seconds:  0.0620
+peak RSS:             677,003,264 bytes
+peak RSS:             ~645.6 MiB
+```
+
+Measured speedup versus the pandas reference on this dataset:
+
+```text
+~1,136x
+```
+
+Measured peak-RSS reduction:
+
+```text
+~15.5%
+```
+
+## Polars + Parquet median
+
+```text
+total seconds:        0.1094
+event-build seconds:  0.0604
+peak RSS:             523,993,088 bytes
+peak RSS:             ~499.7 MiB
+```
+
+Measured speedup versus the pandas reference on this dataset:
+
+```text
+~1,921x
+```
+
+Measured peak-RSS reduction:
+
+```text
+~34.6%
+```
+
+These speedups are measurements on the tested AROL dataset and are not asserted
+as universal Polars speedups.
+
+---
+
+# 110. Three-day stitched performance benchmark
+
+All three implementations produced exactly:
+
+```text
+input rows:         259,198
+event count:      2,290,224
+validation_valid: false
+```
+
+Measured results:
+
+```text
+pandas + CSV
+    total seconds:        634.4165
+    event-build seconds:  633.6476
+    peak RSS:             2,309,390,336 bytes
+    peak RSS:             ~2,202.4 MiB
+
+Polars + CSV
+    total seconds:        0.3392
+    event-build seconds:  0.1544
+    peak RSS:             1,527,234,560 bytes
+    peak RSS:             ~1,456.5 MiB
+
+Polars + Parquet
+    total seconds:        0.2148
+    event-build seconds:  0.1414
+    peak RSS:             1,125,515,264 bytes
+    peak RSS:             ~1,073.4 MiB
+```
+
+Measured speedups versus pandas + CSV:
+
+```text
+Polars + CSV:      ~1,870x
+Polars + Parquet:  ~2,953x
+```
+
+Measured peak-RSS reduction versus pandas + CSV:
+
+```text
+Polars + CSV:      ~33.9%
+Polars + Parquet:  ~51.3%
+```
+
+Again, these are dataset-specific measured results.
+
+---
+
+# 111. Exact event parity evidence
+
+The one-day real-data event table was reconstructed independently by the pandas
+reference and the Polars production implementation.
+
+Both produced:
+
+```text
+765,703 events
+```
+
+The complete normalized event tables were compared row-by-row with:
+
+```text
+check_dtypes=True
+check_row_order=True
+check_column_order=True
+```
+
+Result:
+
+```text
+PARITY PASSED
+All 765,703 event rows match exactly.
+```
+
+This verifies that the optimized implementation preserves event content, order,
+schema, and semantics on the tested real file.
+
+---
+
+# 112. Validation parity evidence
+
+The three-day real dataset returned `valid=False` in both the pandas reference
+and Polars production validators.
+
+The complete validation reports matched exactly.
+
+Both implementations reported:
+
+```text
+missing values:    none
+duplicate ts:      0
+out-of-order ts:   0
+dtype issues:      none
+units:             valid
+timestamp gaps:    2
+```
+
+Exact gaps:
+
+```text
+row 3600
+previous: 2026-01-31 16:59:59
+current:  2026-01-31 17:00:01
+gap:      2.0 seconds
+
+row 89999
+previous: 2026-02-01 16:59:59
+current:  2026-02-01 17:00:01
+gap:      2.0 seconds
+```
+
+Therefore `validation_valid=False` is a property of the source telemetry and not
+a Polars regression.
+
+---
+
+# 113. Benchmark gate decision
+
+The mandatory pre-Step-10 gate is now considered **PASSED**.
+
+Evidence completed:
+
+```text
+existing regression/unit tests                  ✅
+Polars conversion tests                         ✅
+stitched-boundary regression tests              ✅
+one-day row-count parity                        ✅
+one-day event-count parity                      ✅
+one-day complete event-table equality           ✅
+three-day row-count parity                      ✅
+three-day event-count parity                    ✅
+three-day validation-state parity               ✅
+three-day detailed validation-report parity     ✅
+runtime benchmark                               ✅
+peak-memory benchmark                           ✅
+CSV → Parquet conversion benchmark              ✅
+```
+
+The pandas implementation remains in the repository as a behavioral reference
+until deliberate cleanup/removal is approved.
+
+---
+
+# 114. Updated milestone status
+
+```text
+M0 — Contract / shared interface
+    Original contract written                         ✅
+    Polars/Parquet architecture amendment written     ✅
+    Person B re-confirmation of changed shared
+    dataframe/tool boundary                           ⏳
+
+M1 — Data loads & validates
+    Original Step 4 loader                            ✅
+    Original Step 5 validation                        ✅
+
+M2 — Event table exists
+    Original Steps 6–9                                ✅
+
+M2.5 — Production performance refactor
+    Step 4 conversion + lazy loading                  ✅
+    Step 5 validation                                 ✅
+    Step 6 closure detection                          ✅
+    Step 7 event assembly                             ✅
+    Step 8 capping speed                              ✅
+    Step 9 final event table                          ✅
+    Event Parquet persistence                         ✅
+    Exact real-data event parity                      ✅
+    Detailed validation parity                        ✅
+    Real-data runtime benchmark                       ✅
+    Peak-memory benchmark                             ✅
+    M2.5 benchmark/parity gate                        ✅ COMPLETE
+
+M3 — Analytics
+    Step 10 torque statistics                         ⏭ NEXT
+    Steps 11–14                                       ⏳
+
+M4 — Agent tools
+    Steps 15–17                                       ⏳
+
+M5 — Evaluation/docs
+    Steps 18–20                                       ⏳
+
+M6 — Integration
+    Steps 21–22                                       ⏳
+```
+
+---
+
+# 115. Current audit snapshot
+
+**Date:** 2026-09-12  
+**Python:** 3.12.14  
+**Polars:** 1.44.2  
+**Reference dataframe engine:** pandas 3.0.5  
+**Canonical production dataframe engine:** Polars  
+**Canonical persisted working/event format:** Parquet  
+**Original Steps 4–9:** COMPLETE  
+**M2:** COMPLETE  
+**M2.5:** COMPLETE  
+**Event-Parquet persistence:** COMPLETE  
+**Real-data exact event parity:** PASSED  
+**Detailed validation parity:** PASSED  
+**Real-data benchmark:** COMPLETE  
+**Peak-memory benchmark:** COMPLETE  
+**Step 10:** UNBLOCKED — NEXT
+
+---
+
+# 116. Immediate next implementation task
+
+Begin **Step 10 — Torque statistics**.
+
+Production analytics must:
+
+1. consume the clean Polars event table / event Parquet;
+2. never read raw wide telemetry directly;
+3. use deterministic Polars operations;
+4. return JSON-safe plain Python values;
+5. support optional status filtering;
+6. return mean, minimum, maximum, standard deviation, and sample size;
+7. include focused unit tests with hand-computed expected values.
+
+
+
+---
+
+# 117. Step 10 — Torque statistics
+
+**Status:** COMPLETE  
+**Full project regression after Step 10:** 155 / 155 PASS  
+**Milestone:** M3 analytics in progress  
+**Next step:** Step 11 — Torque distribution
+
+Production implementation:
+
+```text
+src/analytics/torque_stats.py
+```
+
+The implementation consumes only the clean Polars event table / event Parquet
+boundary. It does not access raw wide telemetry.
+
+The function supports:
+
+```python
+torque_stats(events, status_filter=None)
+```
+
+and returns deterministic, JSON-safe values for:
+
+```text
+mean
+min
+max
+std
+sample_size
+```
+
+Status filtering supports:
+
+```text
+None          -> all events
+"successful"  -> status == 0
+integer code  -> exact raw AROL status
+```
+
+Null and non-finite torque observations are excluded from the statistical sample.
+Standard deviation uses the sample definition (`ddof=1`).
+
+Focused tests cover:
+
+```text
+hand-computed mean/min/max/std
+successful-only filtering
+numeric status filtering
+LazyFrame input
+empty filtered result
+JSON serialization
+required-column validation
+invalid filter handling
+```
+
+The complete repository regression suite passed:
+
+```text
+155 passed
+```
+
+Therefore Step 10 is accepted as complete.
+
+---
+
+# 118. Updated milestone status after Step 10
+
+```text
+M0 — Contract / shared interface
+    Original contract written                         ✅
+    Polars/Parquet architecture amendment written     ✅
+    Person B shared-boundary confirmation              ⏳
+
+M1 — Data loads & validates
+    Steps 4–5                                         ✅
+
+M2 — Event table exists
+    Steps 6–9                                         ✅
+
+M2.5 — Performance refactor verified
+    Polars/Parquet refactor                           ✅
+    exact event parity                                ✅
+    validation parity                                 ✅
+    runtime/memory benchmark                          ✅ COMPLETE
+
+M3 — Analytics
+    Step 10 torque statistics                         ✅
+    Step 11 torque distribution                       ⏭ NEXT
+    Step 12 trend analysis                            ⏳
+    Step 13 anomaly detection                         ⏳
+    Step 14 head correlation                          ⏳
+
+M4 — Agent tools
+    Steps 15–17                                       ⏳
+
+M5 — Evaluation/docs
+    Steps 18–20                                       ⏳
+
+M6 — Integration
+    Steps 21–22                                       ⏳
+```
+
+---
+
+# 119. Immediate next implementation task
+
+Begin **Step 11 — Torque distribution**.
+
+Required behavior from the working specification:
+
+```text
+- consume the clean Polars event table / event Parquet
+- return histogram bin edges and counts as data, not a plot
+- support configurable bins
+- counts must sum to the number of events considered
+- output must be JSON-safe
+```
+
+
+
+---
+
+# 120. Step 11 — Torque distribution
+
+**Status:** COMPLETE  
+**Full project regression after Step 11:** 171 / 171 PASS  
+**Milestone:** M3 analytics in progress  
+**Next step:** Step 12 — Trend analysis
+
+Production implementation:
+
+```text
+src/analytics/torque_distribution.py
+```
+
+The function consumes the clean Polars event table / event Parquet boundary and
+returns histogram data rather than rendering a plot.
+
+Supported output:
+
+```text
+bin_edges
+counts
+sample_size
+```
+
+Behavior verified by tests:
+
+```text
+configurable number of bins
+hand-computed two-bin example
+counts sum to sample size
+successful-only status filtering
+numeric status filtering
+LazyFrame input
+empty filtered result
+constant-torque input
+non-finite torque exclusion
+JSON-safe plain Python output
+invalid bin validation
+```
+
+The complete repository regression suite passed:
+
+```text
+171 passed
+```
+
+Therefore Step 11 is accepted as complete.
+
+---
+
+# 121. Updated milestone status after Step 11
+
+```text
+M0 — Contract / shared interface
+    Original contract written                         ✅
+    Polars/Parquet architecture amendment written     ✅
+    Person B shared-boundary confirmation              ⏳
+
+M1 — Data loads & validates
+    Steps 4–5                                         ✅
+
+M2 — Event table exists
+    Steps 6–9                                         ✅
+
+M2.5 — Performance refactor verified
+    Polars/Parquet refactor                           ✅
+    exact event parity                                ✅
+    validation parity                                 ✅
+    runtime/memory benchmark                          ✅ COMPLETE
+
+M3 — Analytics
+    Step 10 torque statistics                         ✅
+    Step 11 torque distribution                       ✅
+    Step 12 trend analysis                            ⏭ NEXT
+    Step 13 anomaly detection                         ⏳
+    Step 14 head correlation                          ⏳
+
+M4 — Agent tools
+    Steps 15–17                                       ⏳
+
+M5 — Evaluation/docs
+    Steps 18–20                                       ⏳
+
+M6 — Integration
+    Steps 21–22                                       ⏳
+```
+
+---
+
+# 122. Immediate next implementation task
+
+Begin **Step 12 — Trend analysis**.
+
+Working-spec requirements:
+
+```text
+- torque_trend(events, window=...) -> dict
+- moving average over event time
+- deterministic drift signal
+- event timestamps drive the time window
+- window size comes from config
+- synthetic upward drift must fire
+- flat synthetic data must not fire
+- JSON-safe output
+```
+
+The shared configuration already defines:
+
+```yaml
+analytics:
+  drift_window_seconds: 3600
+```
+
+
+
+---
+
+# 123. Step 12 — Trend analysis
+
+**Status:** COMPLETE  
+**Full project regression after Step 12:** 189 / 189 PASS  
+**Milestone:** M3 analytics in progress  
+**Next step:** Step 13 — Anomaly detection
+
+Production implementation:
+
+```text
+src/analytics/trend_analysis.py
+```
+
+Step 12 adds deterministic event-time trend analysis over the clean Polars event
+boundary. The configured trailing window is read from:
+
+```yaml
+analytics:
+  drift_window_seconds: 3600
+```
+
+The implementation provides:
+
+```text
+- timestamp-driven trailing moving average
+- deterministic drift slope
+- upward / downward / stable / insufficient-data classification
+- optional event-status filtering
+- LazyFrame support
+- JSON-safe timestamps and numerical output
+```
+
+Focused tests verify:
+
+```text
+window is read from config
+moving average is time-based rather than row-count based
+synthetic upward drift fires
+flat synthetic data remains stable
+synthetic downward drift is identified
+LazyFrame input
+status filtering
+empty and single-event behavior
+non-finite torque exclusion
+JSON serialization
+invalid/missing window configuration
+```
+
+The complete repository regression suite passed:
+
+```text
+189 passed
+```
+
+Therefore Step 12 is accepted as complete.
+
+---
+
+# 124. Updated milestone status after Step 12
+
+```text
+M0 — Contract / shared interface
+    Original contract written                         ✅
+    Polars/Parquet architecture amendment written     ✅
+    Person B shared-boundary confirmation              ⏳
+
+M1 — Data loads & validates
+    Steps 4–5                                         ✅
+
+M2 — Event table exists
+    Steps 6–9                                         ✅
+
+M2.5 — Performance refactor verified
+    Polars/Parquet refactor                           ✅
+    exact event parity                                ✅
+    validation parity                                 ✅
+    runtime/memory benchmark                          ✅ COMPLETE
+
+M3 — Analytics
+    Step 10 torque statistics                         ✅
+    Step 11 torque distribution                       ✅
+    Step 12 trend analysis                            ✅
+    Step 13 anomaly detection                         ⏭ NEXT
+    Step 14 head correlation                          ⏳
+
+M4 — Agent tools
+    Steps 15–17                                       ⏳
+
+M5 — Evaluation/docs
+    Steps 18–20                                       ⏳
+
+M6 — Integration
+    Steps 21–22                                       ⏳
+```
+
+---
+
+# 125. Immediate next implementation task
+
+Begin **Step 13 — Anomaly detection**.
+
+Working-spec requirements:
+
+```text
+- threshold + statistical-deviation detection
+- reason attached to each anomaly
+- thresholds from config
+- planted anomalies detected
+- false-positive rate measured
+- deterministic Polars implementation
+- JSON-safe output
+```
+
+Relevant shared configuration:
+
+```yaml
+analytics:
+  torque_expected_min: 1.5
+  torque_expected_max: 2.5
+  anomaly_sigma: 3.0
+```
+
+
+
+---
+
+# 126. Step 13 — Anomaly detection
+
+**Status:** COMPLETE  
+**Regression status after Step 13:** full repository suite PASS  
+**Milestone:** M3 analytics in progress  
+**Next step:** Step 14 — Head correlation
+
+Production implementation:
+
+```text
+src/analytics/anomaly_detection.py
+```
+
+Step 13 implements deterministic torque-anomaly detection over the clean Polars
+event table.
+
+Detection combines:
+
+```text
+1. configured engineering thresholds
+2. statistical deviation from the observed torque distribution
+```
+
+Configuration is read from:
+
+```yaml
+analytics:
+  torque_expected_min: 1.5
+  torque_expected_max: 2.5
+  anomaly_sigma: 3.0
+```
+
+Each flagged event carries one or more explicit reasons, including:
+
+```text
+below_expected_min
+above_expected_max
+statistical_deviation
+```
+
+The implementation also returns:
+
+```text
+sample_size
+anomaly_count
+anomaly_rate
+mean
+std
+expected_min
+expected_max
+sigma
+anomalies
+```
+
+Focused tests verify:
+
+```text
+below-threshold detection
+above-threshold detection
+boundary values are not falsely flagged
+thresholds come from config
+statistical-deviation detection
+reason attached to every anomaly
+multiple simultaneous reasons
+planted anomaly detection
+synthetic clean-data false-positive measurement
+zero-variance behavior
+status filtering
+LazyFrame input
+non-finite torque exclusion
+empty input
+JSON serialization
+invalid configuration
+missing event columns
+```
+
+The user confirmed the focused tests and the full repository regression suite
+both passed.
+
+Therefore Step 13 is accepted as complete.
+
+---
+
+# 127. Updated milestone status after Step 13
+
+```text
+M0 — Contract / shared interface
+    Original contract written                         ✅
+    Polars/Parquet architecture amendment written     ✅
+    Person B shared-boundary confirmation              ⏳
+
+M1 — Data loads & validates
+    Steps 4–5                                         ✅
+
+M2 — Event table exists
+    Steps 6–9                                         ✅
+
+M2.5 — Performance refactor verified
+    Polars/Parquet refactor                           ✅
+    exact event parity                                ✅
+    validation parity                                 ✅
+    runtime/memory benchmark                          ✅ COMPLETE
+
+M3 — Analytics
+    Step 10 torque statistics                         ✅
+    Step 11 torque distribution                       ✅
+    Step 12 trend analysis                            ✅
+    Step 13 anomaly detection                         ✅
+    Step 14 head correlation                          ⏭ NEXT
+
+M4 — Agent tools
+    Steps 15–17                                       ⏳
+
+M5 — Evaluation/docs
+    Steps 18–20                                       ⏳
+
+M6 — Integration
+    Steps 21–22                                       ⏳
+```
+
+---
+
+# 128. Immediate next implementation task
+
+Begin **Step 14 — Head correlation**.
+
+Working-spec requirement:
+
+```text
+head_correlation(events, head_a, head_b) -> dict
+```
+
+The comparison must include interpretable head-to-head behavior such as torque
+correlation and success-rate difference, handle different event counts
+gracefully, and be verified on deliberately similar and deliberately dissimilar
+synthetic heads.
+
+
+
+---
+
+# 129. Step 14 — Head correlation
+
+**Status:** COMPLETE  
+**Full project regression after Step 14:** 225 / 225 PASS  
+**Milestone:** M3 analytics COMPLETE  
+**Next milestone:** M4 — Agent tools  
+**Next step:** Step 15 — Tool schemas
+
+Production implementation:
+
+```text
+src/analytics/head_correlation.py
+```
+
+Step 14 adds deterministic head-to-head comparison over the clean Polars event
+table.
+
+The comparison includes:
+
+```text
+- independent event counts
+- independent torque sample counts
+- independent mean torque
+- success rate per head
+- success-rate difference
+- success-rate difference in percentage points
+- Pearson torque correlation on shared timestamps
+- deterministic interpretation of the correlation
+```
+
+The implementation handles unequal event counts without row-position pairing.
+Torque correlation is computed only over timestamps shared by the two requested
+heads.
+
+No Load events are excluded from the success-rate denominator.
+
+Focused tests verify:
+
+```text
+deliberately similar heads -> strong positive correlation
+deliberately dissimilar heads -> strong negative correlation
+unequal event counts
+success-rate difference
+No Load exclusion
+no shared timestamps
+constant-torque correlation edge case
+missing head behavior
+LazyFrame input
+JSON serialization
+invalid head IDs
+missing required columns
+```
+
+The complete repository regression suite passed:
+
+```text
+225 passed
+```
+
+Therefore Step 14 is accepted as complete.
+
+---
+
+# 130. Milestone M3 — Analytics COMPLETE
+
+Steps completed:
+
+```text
+Step 10 — Torque statistics       ✅
+Step 11 — Torque distribution     ✅
+Step 12 — Trend analysis          ✅
+Step 13 — Anomaly detection       ✅
+Step 14 — Head correlation        ✅
+```
+
+The deterministic analytics layer now operates entirely on the clean event-table
+boundary and is independent of agent orchestration.
+
+The current callable analytics are:
+
+```text
+torque_stats(...)
+torque_distribution(...)
+torque_trend(...)
+detect_torque_anomalies(...)
+head_correlation(...)
+```
+
+All return JSON-safe plain Python structures suitable for exposure through an
+agent tool interface.
+
+---
+
+# 131. Updated milestone status
+
+```text
+M0 — Contract / shared interface
+    Original contract written                         ✅
+    Polars/Parquet architecture amendment written     ✅
+    Person B shared-boundary confirmation              ⏳
+
+M1 — Data loads & validates
+    Steps 4–5                                         ✅
+
+M2 — Event table exists
+    Steps 6–9                                         ✅
+
+M2.5 — Performance refactor verified
+    Polars/Parquet refactor                           ✅
+    exact event parity                                ✅
+    validation parity                                 ✅
+    runtime/memory benchmark                          ✅ COMPLETE
+
+M3 — Analytics
+    Steps 10–14                                       ✅ COMPLETE
+
+M4 — Agent tools
+    Step 15 tool schemas                              ⏭ NEXT
+    Step 16 deterministic tool execution              ⏳
+    Step 17 tool-interface integration tests           ⏳
+
+M5 — Evaluation/docs
+    Steps 18–20                                       ⏳
+
+M6 — Integration
+    Steps 21–22                                       ⏳
+```
+
+---
+
+# 132. Immediate next implementation task
+
+Begin **Step 15 — Tool schemas**.
+
+Goal:
+
+```text
+Expose the deterministic analytics capabilities as stable, provider-neutral
+tool definitions without coupling Person A's code to any specific LLM SDK.
+```
+
+Step 15 should define tool names, descriptions, argument schemas, and a central
+registry for the analytics functions that will be executed in Step 16.
+
+
+
+---
+
+# 133. Step 15 — Tool schemas
+
+**Status:** COMPLETE  
+**Full project regression after Step 15:** 245 / 245 PASS  
+**Milestone:** M4 agent tools in progress  
+**Next step:** Step 16 — Deterministic tool execution
+
+Production implementation:
+
+```text
+src/agent/tool_schemas.py
+```
+
+Step 15 defines a provider-neutral tool interface for the deterministic analytics
+layer.
+
+Registered tools:
+
+```text
+torque_stats
+torque_distribution
+torque_trend
+detect_torque_anomalies
+head_correlation
+```
+
+The schemas expose only user/model-controlled analytical arguments. Runtime
+internals such as the event table, LazyFrame, config object, CSV paths, Parquet
+paths, and configured drift window are intentionally not exposed to the model.
+
+The tool registry provides:
+
+```text
+TOOL_INTERFACE_VERSION
+TOOL_SCHEMAS
+TOOL_SCHEMA_BY_NAME
+list_tool_schemas()
+get_tool_schema()
+```
+
+Focused tests verify:
+
+```text
+exact registered tool set
+unique names
+basic schema structure
+JSON serialization
+no runtime-internal arguments
+status-filter schemas
+positive histogram bins
+required head-correlation arguments
+unknown-tool rejection
+invalid tool-name types
+defensive copies
+```
+
+The complete repository regression suite passed:
+
+```text
+245 passed
+```
+
+Therefore Step 15 is accepted as complete.
+
+---
+
+# 134. Updated milestone status after Step 15
+
+```text
+M0 — Contract / shared interface
+    Original contract written                         ✅
+    Polars/Parquet architecture amendment written     ✅
+    Person B shared-boundary confirmation              ⏳
+
+M1 — Data loads & validates
+    Steps 4–5                                         ✅
+
+M2 — Event table exists
+    Steps 6–9                                         ✅
+
+M2.5 — Performance refactor verified
+    Polars/Parquet refactor                           ✅ COMPLETE
+
+M3 — Analytics
+    Steps 10–14                                       ✅ COMPLETE
+
+M4 — Agent tools
+    Step 15 tool schemas                              ✅
+    Step 16 deterministic tool execution              ⏭ NEXT
+    Step 17 tool-interface integration tests           ⏳
+
+M5 — Evaluation/docs
+    Steps 18–20                                       ⏳
+
+M6 — Integration
+    Steps 21–22                                       ⏳
+```
+
+---
+
+# 135. Immediate next implementation task
+
+Begin **Step 16 — Deterministic tool execution**.
+
+Goal:
+
+```text
+Create a single controlled dispatcher that binds model-visible tool arguments
+to the already-tested analytics functions while injecting runtime-only context
+(events and config) internally.
+
+No eval, exec, arbitrary imports, or arbitrary function execution.
+```
+
+
+
+---
+
+# 136. Step 16 — Deterministic tool execution
+
+**Status:** COMPLETE  
+**Full project regression after Step 16:** 267 / 267 PASS  
+**Milestone:** M4 agent tools in progress  
+**Next step:** Step 17 — Tool-interface integration tests
+
+Production implementation:
+
+```text
+src/agent/tool_executor.py
+```
+
+Step 16 adds the controlled execution boundary between the model-visible tool
+interface and the trusted deterministic analytics layer.
+
+The dispatcher:
+
+```text
+execute_tool(tool_name, arguments, events, config)
+```
+
+uses a fixed executor registry and internally injects runtime-only context.
+
+Supported tools:
+
+```text
+torque_stats
+torque_distribution
+torque_trend
+detect_torque_anomalies
+head_correlation
+```
+
+Security and architecture properties verified:
+
+```text
+- fixed tool-name -> executor mapping
+- no eval()
+- no exec()
+- no dynamic imports
+- no arbitrary function execution
+- model cannot supply or replace events
+- model cannot supply or replace config
+- unexpected arguments rejected
+- required arguments enforced
+- analytics validation errors propagate
+- DataFrame and LazyFrame inputs supported
+- returned results remain JSON serializable
+- repeated execution is deterministic
+```
+
+The executor registry was also verified to match the Step 15 schema registry.
+
+The complete repository regression suite passed:
+
+```text
+267 passed
+```
+
+Therefore Step 16 is accepted as complete.
+
+---
+
+# 137. Updated milestone status after Step 16
+
+```text
+M0 — Contract / shared interface
+    Original contract written                         ✅
+    Polars/Parquet architecture amendment written     ✅
+    Person B shared-boundary confirmation              ⏳
+
+M1 — Data loads & validates
+    Steps 4–5                                         ✅
+
+M2 — Event table exists
+    Steps 6–9                                         ✅
+
+M2.5 — Performance refactor verified
+    Polars/Parquet refactor                           ✅ COMPLETE
+
+M3 — Analytics
+    Steps 10–14                                       ✅ COMPLETE
+
+M4 — Agent tools
+    Step 15 tool schemas                              ✅
+    Step 16 deterministic tool execution              ✅
+    Step 17 tool-interface integration tests           ⏭ NEXT
+
+M5 — Evaluation/docs
+    Steps 18–20                                       ⏳
+
+M6 — Integration
+    Steps 21–22                                       ⏳
+```
+
+---
+
+# 138. Immediate next implementation task
+
+Begin **Step 17 — Tool-interface integration tests**.
+
+Goal:
+
+```text
+Prove the complete Person-A tool boundary works end-to-end:
+
+tool schema -> model-style tool call -> controlled executor ->
+deterministic analytics -> JSON-safe result
+```
+
+Step 17 should not add an LLM SDK dependency. It verifies the provider-neutral
+contract that Person B can call from the orchestration layer.
+
+
+
+---
+
+# 139. Tool-interface integration dry run
+
+**Status:** PASS  
+**Full project regression:** 281 / 281 PASS
+
+The provider-neutral integration suite now verifies the complete local boundary:
+
+```text
+tool schema
+    ↓
+model-style tool call
+    ↓
+controlled executor
+    ↓
+deterministic analytics
+    ↓
+JSON-safe result
+```
+
+Verified locally:
+
+```text
+all published tools execute end-to-end
+schema/executor argument contracts agree
+runtime config is injected internally
+runtime event table is injected internally
+model attempts to override config/events are rejected
+unknown tools are rejected
+required tool arguments are enforced
+LazyFrame event boundary works
+tool results survive JSON round-trip
+repeated identical calls are deterministic
+```
+
+The full repository regression suite passed:
+
+```text
+281 passed
+```
+
+---
+
+# 140. Important alignment with the original Person-A working spec
+
+The local executor and integration tests are valuable extra infrastructure, but
+they do not by themselves satisfy every original M4 acceptance criterion.
+
+The original Step 16 is:
+
+```text
+Diagnostic prompts
+```
+
+and requires diagnostic query families such as:
+
+```text
+"which head behaves differently"
+"why is head 4 failing more"
+"compare head 1 and head 2"
+```
+
+with sensible tool sequences, tool-grounded explanations, and robustness to
+rephrasing.
+
+The original Step 17 is:
+
+```text
+Verify tool selection
+```
+
+and is tagged:
+
+```text
+[CONSUMES B]
+```
+
+because it requires Person B's real agent loop.
+
+Its audit requires approximately 10 real questions to be run through the agent,
+checking that:
+
+```text
+the right tool(s) are selected
+wrong selections are corrected through tool descriptions
+the agent does not fabricate numbers that should come from tools
+```
+
+Therefore:
+
+```text
+local tool-interface integration tests   ✅ PASS
+original Step 16 diagnostic prompts      ⏳ PENDING
+original Step 17 real agent selection    ⏳ PENDING PERSON B
+M4 — Agent can use my tools              ⏳ NOT FORMALLY CLOSED YET
+```
+
+The previously added controlled executor remains retained as an additional safety
+and integration layer; it does not replace the original prompt/tool-selection
+evaluation requirements.
+
+---
+
+# 141. Corrected milestone status
+
+```text
+M0 — Contract / shared interface
+    Original contract written                         ✅
+    Polars/Parquet architecture amendment written     ✅
+    Person B shared-boundary confirmation              ⏳
+
+M1 — Data loads & validates
+    Steps 4–5                                         ✅
+
+M2 — Event table exists
+    Steps 6–9                                         ✅
+
+M2.5 — Performance refactor verified
+    Polars/Parquet refactor                           ✅ COMPLETE
+
+M3 — Analytics
+    Steps 10–14                                       ✅ COMPLETE
+
+M4 — Agent can use my tools
+    Step 15 tool schemas                              ✅
+    Extra controlled executor                         ✅
+    Extra local integration dry run                   ✅
+    Original Step 16 diagnostic prompts               ⏭ NEXT
+    Original Step 17 real agent tool-selection test   ⏳ PERSON B REQUIRED
+
+M5 — Proven & documented
+    Step 18 anomaly ground-truth evaluation           ⏳
+    Step 19 data schema & methods documentation        ⏳
+    Step 20 confidence & limits language               ⏳
+
+M6 — Integrated
+    Steps 21–22                                       ⏳
+```
+
+---
+
+# 142. Immediate next task
+
+Complete the original **Step 16 — Diagnostic prompts** locally.
+
+After that:
+
+```text
+if Person B's agent loop is ready:
+    run original Step 17 and close M4
+
+if Person B's agent loop is not ready:
+    keep Step 17 explicitly pending and build the Step 18 evaluation harness
+    using a labelled stand-in dataset until Person B's planted-fault data arrives
+```
+

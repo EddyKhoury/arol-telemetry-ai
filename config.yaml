@@ -19,3 +19,10 @@ processing:
   engine: polars
 
   lazy: true
+
+analytics:
+  torque_expected_min: 1.5
+  torque_expected_max: 2.5
+  drift_window_seconds: 3600
+  idle_window_seconds: 300
+  anomaly_sigma: 3.0

@@ -1,0 +1,12 @@
+{
+  "mode": "polars_parquet",
+  "files": 3,
+  "input_rows": 259198,
+  "input_bytes": 5242408,
+  "validation_valid": false,
+  "event_count": 2290224,
+  "scan_setup_seconds": 0.004193749977275729,
+  "validation_seconds": 0.06921520794276148,
+  "event_build_seconds": 0.14141658402513713,
+  "total_seconds": 0.21482770796865225
+}

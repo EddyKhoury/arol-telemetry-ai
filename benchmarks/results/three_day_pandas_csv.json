@@ -1,0 +1,12 @@
+{
+  "mode": "pandas_csv",
+  "files": 3,
+  "input_rows": 259198,
+  "input_bytes": 173627678,
+  "validation_valid": false,
+  "event_count": 2290224,
+  "load_seconds": 0.6231290839496069,
+  "validation_seconds": 0.14578074996825308,
+  "event_build_seconds": 633.6475574580254,
+  "total_seconds": 634.4164706249721
+}

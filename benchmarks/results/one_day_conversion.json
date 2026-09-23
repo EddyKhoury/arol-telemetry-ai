@@ -1,0 +1,10 @@
+{
+  "mode": "csv_to_parquet_conversion",
+  "files": 1,
+  "input_bytes": 57176271,
+  "output_bytes": 1719462,
+  "conversion_seconds": 0.036542250018101186,
+  "parquet_paths": [
+    "data/parquet/benchmark/telemetry_MCC777eda3db57348ef8a3113a642ae74db_2026-02-01.parquet"
+  ]
+}
