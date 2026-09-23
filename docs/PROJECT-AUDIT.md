@@ -6099,3 +6099,84 @@ These tests require Person B's repository; they skip if it is unavailable.
 
 Next: document the counter-jump policy and quantify jumps on real telemetry.
 Status decoding and success-rate denominator differences remain open.
+
+## Integration checkpoint — full counter audit measured
+
+Completed the full CSV counter diagnostic. Whole-number values were validated before integer conversion. Comparisons included file boundaries.
+
+```json
+{
+  "machine_id": "MCC777eda3db57348ef8a3113a642ae74db",
+  "files": 89,
+  "heads": 36,
+  "input_rows": 7623968,
+  "ts_min": "2026-01-31T16:00:00",
+  "ts_max": "2026-04-30T16:59:59",
+  "exact_plus_one": 54722936,
+  "holds": 219329712,
+  "jump_rows": 408076,
+  "counter_units_in_jumps": 156189350,
+  "extra_units_beyond_one_per_jump": 155781274,
+  "decreases": 2088,
+  "positive_delta_rows": 55131012,
+  "positive_counter_units": 210912286,
+  "timestamp_gaps_over_1s": 87,
+  "boundary_exact_plus_one": 667,
+  "boundary_jump_rows": 0,
+  "boundary_counter_units_in_jumps": 0,
+  "boundary_decreases": 0
+}
+```
+
+Interpretation and limits:
+- Production event detection remains exactly +1.
+- Jump rows and counter units within jumps are distinct measurements.
+- Positive counter units are not verified individual closure events.
+- Causes of counter decreases remain undetermined.
+- The fixed eight-per-machine-day warning does not describe this dataset.
+- Independent per-file processing omits the 667 exact +1 transitions measured across file boundaries.
+- Timestamps come from CSV contents; no timezone conversion was made.
+- No production code or event semantics changed.
+- Detailed results: data/counter_jump_audit.json.
+
+Status: measurement complete; interpretation and integration policy pending.
+
+Next action: inspect large jumps and decreases before deciding how to represent and report counter discontinuities.
+
+## Integration decision — preserve exact +1 event semantics
+
+Evidence:
+- The full 89-file counter audit completed successfully.
+- Inspection of H17 on the file dated 2026-03-23 showed decreases
+  from large counter values to zero.
+- One observed decrease was 68928 to 0.
+- The largest inspected positive jump was 0 to 71271 in one second.
+- These observations are consistent with counter-reading discontinuities.
+  Their underlying cause has not been established.
+- Findings from this selected head/day do not classify every jump
+  in the full dataset.
+
+Policy for the first integration:
+- Person A's exact +1 rule remains authoritative for observed events.
+- Preserve existing event timestamps, torque, status and decoded fields.
+- Do not interpolate, forward-fill zeros, or reconstruct individual
+  closures from jumps.
+- Keep jump/decrease diagnostics separate from event-based analytics.
+- Report event counts as observed exact +1 closures, not guaranteed
+  total physical production.
+- Consume Person A events through the adapter with redecode=False.
+- Adapter count_delta=1 and inferred=False describe these input events;
+  they do not establish completeness of the underlying telemetry.
+- Do not use Person B's raw positive-delta weighted throughput path
+  for the first integration without correcting discontinuity handling.
+
+Remaining implementation work:
+- Apply this policy explicitly in the integration path.
+- Replace the unconditional eight-per-machine-day warning.
+- Resolve KPI denominator and decoding differences explicitly.
+- Retain file-boundary comparisons when building events from multiple files.
+- Integrate and test the first torque_stats tool through a thin wrapper.
+
+Status:
+Counter audit and initial integration policy documented.
+Production integration changes remain pending.
