@@ -6180,3 +6180,34 @@ Remaining implementation work:
 Status:
 Counter audit and initial integration policy documented.
 Production integration changes remain pending.
+
+## Integration checkpoint — registered torque_stats verified
+
+Implemented:
+- Added Person B's shared envelope and registry infrastructure.
+- Extended the registry vocabulary with status_filter:
+  null, "successful", or an integer status code.
+- Added src/analytics/registered_torque.py.
+- The wrapper delegates calculations to Person A's existing torque_stats.
+- Results retain the original statistics dictionary inside B's envelope.
+- Metadata includes finite sample size, units, applied filters,
+  contributing observation timestamps, and execution timing.
+
+Verified locally:
+- Focused wrapper tests: 17 passed in 0.10s.
+- Full project regression: 308 passed in 1.18s.
+- Tests cover calculation parity, finite values, sample standard deviation,
+  status selection, empty input, metadata, invalid arguments,
+  missing columns, JSON serialization, and unchanged input data.
+
+Scope:
+- Existing analytics and ingestion code remain unchanged.
+- This verifies registry dispatch directly.
+- Planner routing, orchestrator wiring, report rendering, and real-data
+  end-to-end execution remain pending.
+- The four adapter characterization tests still require the sibling
+  Person B checkout.
+
+Next action:
+Connect torque_stats to deterministic planner routing and report output,
+then verify the complete request-to-result path.
