@@ -596,3 +596,62 @@ Limits:
 
 Next action:
 Review rejected/error cases before deciding whether to adjust the prompt/model or proceed to a live orchestration smoke test. Keep scope validation unchanged.
+
+## Integration batch — complete JSON text tool proposals
+
+Observed live replies distinguish two problems:
+- Qwen2.5-Coder 14B returned JSON proposals in message.content. Its sampled
+  scoped torque_stats proposal preserved the requested parameters.
+- Qwen's sampled unscoped proposal added blank filters and an unrequested
+  successful status. Those arguments remain invalid.
+- Llama3.2 3B emitted native calls with string bins, null placeholders, and
+  string status "0". Those values remain invalid.
+
+Added a format adapter for one complete JSON object containing exactly
+name and arguments, optionally inside one complete JSON fence. It runs
+only when native tool calls are absent. It does not extract JSON from
+prose, accept multiple objects, repair values, or drop parameters.
+Duplicate JSON keys and extra proposal keys are rejected. Native calls
+retain priority and existing validation. The complete proposed analysis
+and scope must still match the independently parsed request.
+
+New tests cover observed examples, lossless format adaptation, malformed
+or ambiguous text, duplicate keys, scope changes, missing arguments,
+configuration overrides, and invalid native calls alongside valid text.
+Previous regression: 537 passed in 1.17s. This batch: tests pending.
+Next action: run pytest tests -q, then replay saved replies offline. No new
+live model performance or analytics execution is claimed by this install.
+
+## Integration measurement — saved LLM reply replay 20260923-191530-649100
+
+Parsed complete JSON text proposals when native calls are absent. Existing strict argument and scope checks remain in force.
+
+- llama3.2:3b: supported=10; outcomes={'proposal_rejected': 9, 'accepted_exact': 1}; separate gates={'gate_blocked': 4}.
+- qwen2.5-coder:14b: supported=10; outcomes={'proposal_rejected': 1, 'accepted_exact': 9}; separate gates={'gate_blocked': 4}.
+- Evidence: benchmarks/integration/llm_json_reply_replay_20260923-191530-649100.json.
+- Live model requests: 0.
+- Source hashes and working-tree status are recorded; this replay may use uncommitted adapter changes.
+
+- Post-hoc adaptation using observed response formats; not a fresh or held-out evaluation.
+- No arguments were dropped, coerced, or supplied; requested scope must still match exactly.
+- No analytics or report generation executed.
+- Native calls are authoritative; complete JSON text is parsed only when native calls are absent.
+
+Next action: review replay outcomes and regression results before changing prompts, model configuration, or running a fresh evaluation.
+
+## Integration checkpoint — JSON proposal adapter verified
+
+- Full regression: 570 passed in 1.42s.
+- Added 33 JSON proposal validation tests.
+- Offline replay: Qwen2.5-Coder 14B accepted 9/10 saved proposals.
+- Offline replay: Llama3.2 3B accepted 1/10 saved proposals.
+- All four scope-gate cases remained blocked for each model.
+- Qwen's unscoped torque_stats proposal remains rejected because it
+  introduces blank filters and an unrequested successful status.
+- Argument types and exact scope validation remain unchanged.
+- Replay used existing responses; no new inference or analytics ran.
+- Evidence: benchmarks/integration/llm_json_reply_replay_20260923-191530-649100.json
+
+Next action:
+Run a fresh scoped Qwen request through the real-data orchestrator,
+verify calculation parity, and save its report and trace.

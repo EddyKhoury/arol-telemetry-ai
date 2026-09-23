@@ -17,10 +17,41 @@ def _json_object(pairs):
     return result
 
 
+def _proposal_message(message):
+    """Accept one complete JSON proposal only when native calls are absent.
+
+    Native tool calls remain authoritative. Ordinary prose is never searched
+    for embedded JSON, and no parameter is removed, coerced or supplied.
+    """
+    if not isinstance(message, dict):
+        raise ValueError("Model message must be an object")
+    native = message.get("tool_calls")
+    if native is not None and native != []:
+        return message
+    content = message.get("content")
+    if not isinstance(content, str) or not content.strip():
+        return message
+    text = content.strip()
+    if text.startswith("```"):
+        import re
+        fenced = re.fullmatch(r"```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n```", text, re.I)
+        if fenced is None:
+            raise ValueError("Expected one complete JSON fence without surrounding prose")
+        text = fenced.group(1)
+    try:
+        proposal = json.loads(text, object_pairs_hook=_json_object)
+    except (ValueError, TypeError) as exc:
+        raise ValueError(f"Invalid JSON tool proposal: {exc}") from exc
+    if not isinstance(proposal, dict) or set(proposal) != {"name", "arguments"}:
+        raise ValueError("JSON proposal must contain exactly name and arguments")
+    return {"tool_calls": [{"function": proposal}]}
+
+
 def strict_calls(message, lookup):
     """Require one registered, verified tool with canonical, typed parameters."""
     if not isinstance(message, dict):
         raise ValueError("Model message must be an object")
+    message = _proposal_message(message)
     raw_calls = message.get("tool_calls")
     if not isinstance(raw_calls, list) or len(raw_calls) != 1:
         raise ValueError("Exactly one tool call is required")
