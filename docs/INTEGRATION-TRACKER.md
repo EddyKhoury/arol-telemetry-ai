@@ -472,3 +472,28 @@ domain routes are unchanged. KPI denominator alignment remains pending.
 Next action:
 Verify the four new routes against real event data and save comparison
 evidence, reports, and traces.
+
+## Integration checkpoint — four additional real-data routes verified
+
+- Verified source commit: 7e5a42a82e27e49f55da607ae3d4f6a26df01edd.
+- Deterministic planner; all four routes passed complete nested-result parity checks.
+- Float tolerance: relative/absolute 1e-12; counts and labels compared exactly.
+- Original event fields preserved; requested parameters preserved; one call per route.
+- torque_distribution: n=7,575; result parity verified.
+- torque_trend: n=7,575; result parity verified.
+- detect_torque_anomalies: n=7,575; result parity verified.
+- head_correlation: n=12,178; result parity verified.
+- Portable evidence: benchmarks/integration/analytics_routes_real_2026-02-01.json.
+- Detailed comparisons, reports and traces: data/integration_smoke/analytics-20260923-184831-981277.
+- Last full project regression: 472 passed in 1.13s (before this evidence run).
+
+Scope and limits:
+One previously built event file; H05 successful events for three tools; H05/H06 all statuses for comparison; specified machine; start inclusive/end exclusive; timestamps as stored.
+- No live LLM routing tested.
+- No preceding-file boundary tested.
+- Only observed exact +1 events; total production completeness is not measured.
+- Configured limits and numeric trend direction do not establish machine health or root cause.
+- Head comparison retains Person A's non-No-Load success denominator; KPI alignment remains pending.
+
+Next action:
+Review live LLM scope preservation and unsupported-argument handling before enabling model routing.
