@@ -315,7 +315,10 @@ def _next_checks(ok_results, failed) -> list[str]:
                           "greater than one mean the 1 Hz sampling missed a "
                           "cycle, which slightly understates every rate.")
     for name, _ in failed:
-        checks.append(f"- Re-run `{name}` with a wider window or fewer filters.")
+        checks.append(
+            f"- Check the reported error and requested filters for `{name}` "
+            "before retrying."
+        )
     if not checks:
         checks.append("- Nothing anomalous surfaced; re-run against a longer "
                       "window to confirm the machine is stable over time.")

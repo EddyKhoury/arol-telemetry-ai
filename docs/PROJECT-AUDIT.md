@@ -6245,3 +6245,42 @@ Scope and limitations:
 Next action:
 Connect the production orchestration path to Person A's event data,
 preserve requested scope, and verify a torque report end to end.
+
+## Integration checkpoint — event source and orchestrator verified
+
+Implemented:
+- Added PersonASource for eight-column event Parquet produced by A's pipeline.
+- Validates input columns and dtypes before adaptation.
+- Resolves relative event paths from the repository root.
+- Preserves A's decoded fields through explicit redecode=False.
+- Changed the integrated adapter's default to preserve decoding.
+- Replaced the fixed eight-per-machine-day warning with an explicit
+  statement that production completeness is not measured here.
+- Connected Person B's orchestrator to the registered torque tool.
+- Removed retries that discard requested filters.
+- Requires explicit pool selection when multiple pools are configured.
+- Supports Markdown report and JSON trace delivery.
+- Updated report failure guidance to preserve requested scope.
+
+Verification:
+- Added 9 event-source tests and 8 orchestrator tests.
+- Focused checks: 17 passed in 0.14s.
+- Full project regression: 347 passed in 1.01s.
+- Tests use A's actual event builder and Parquet writer with controlled
+  telemetry containing exact +1 increments, larger jumps, and decreases.
+- Verified decoding preservation, duplicate preservation, empty input,
+  missing files, invalid input schema, pool selection, report delivery,
+  and failures without filter relaxation.
+
+Scope and limitations:
+- Actual orchestration is verified on controlled telemetry.
+- Real telemetry execution and live LLM routing remain unverified.
+- Filter preservation is verified for deterministic routing and dispatch;
+  the imported LLM planner still needs separate review.
+- Only torque_stats is currently connected as an analytics tool.
+- Raw ingestion and existing analytics calculations remain unchanged.
+
+Next action:
+Run one real telemetry file through A's event builder, event Parquet,
+PersonASource, deterministic planner, orchestrator, report and trace.
+Compare the wrapped statistics against a direct torque_stats calculation.
