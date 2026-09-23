@@ -178,3 +178,37 @@ Scope:
 Next action:
 Connect torque_stats to deterministic planner routing and report output,
 then verify the complete request-to-result path.
+
+## Integration checkpoint — torque routing and reports verified
+
+Implemented:
+- Imported Person B's planner, report, trace and time utilities.
+- Added deterministic routing for aggregate torque statistics,
+  optionally restricted to successful closures or an integer status code.
+- Unsupported torque requests, including head/date filters, request
+  clarification rather than silently broadening the analysis.
+- Added a torque report template using registered tool results.
+- Reports handle empty samples and undefined single-observation standard
+  deviation explicitly.
+- Small-sample notices remain visible alongside tool notes.
+- Torque-only reports omit unrelated rate-denominator statements.
+- Torque summaries do not claim machine stability or engineering compliance.
+
+Verification:
+- Added 15 planner tests and 7 report integration tests.
+- Combined torque checks: 39 passed in 0.09s.
+- Full project regression: 330 passed in 1.19s.
+- Controlled-data tests cover question -> plan -> registry dispatch ->
+  existing analytics -> report assembly, plus tool-call tracing.
+
+Scope and limitations:
+- Tests compose the components directly.
+- Production orchestrator and data-source integration remain pending.
+- No live LLM routing or real-data report was verified in this checkpoint.
+- Existing analytics calculations and ingestion semantics remain unchanged.
+- Non-torque planner routes are preserved, but their tools are not yet
+  integrated into this branch.
+
+Next action:
+Connect the production orchestration path to Person A's event data,
+preserve requested scope, and verify a torque report end to end.
