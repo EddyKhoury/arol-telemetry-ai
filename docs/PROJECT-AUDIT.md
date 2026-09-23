@@ -6450,3 +6450,58 @@ Remaining:
 Next action:
 Add deterministic question routes for distributions, trends, anomalies
 and head comparisons while preserving requested scope.
+
+## Integration batch — deterministic routing for five analytics tools
+
+Implemented complete-query routing for torque statistics, distribution,
+trend, anomalies, and two-head comparison. Scope is preserved; unsupported
+clauses, conflicting filters, timezone-aware bounds, relative dates and
+configuration overrides request clarification before any tool call.
+Comparison accepts only machine/time scope; status or extra-head scope is
+not silently discarded. Histogram bins must be positive integers.
+
+Added controlled tests for question routing and the actual event-Parquet ->
+source -> RulePlanner -> orchestrator -> existing analytics -> report path,
+with independently selected event scopes and direct calculation parity.
+Old negative cases whose analyses are now supported retain negative-scope
+coverage through an explicit unsupported exclusion. Migrated cases:
+[
+  {
+    "file": "tests/test_torque_planner.py",
+    "old": "Is torque drifting?",
+    "new": "Is torque drifting excluding head 3"
+  },
+  {
+    "file": "tests/test_torque_planner.py",
+    "old": "Compare torque between H01 and H02",
+    "new": "Compare torque between H01 and H02 excluding head 3"
+  },
+  {
+    "file": "tests/test_torque_planner.py",
+    "old": "Show torque distribution",
+    "new": "Show torque distribution excluding head 3"
+  }
+]
+
+Previous verified regression: 419 passed in 1.12s.
+This routing batch: installed, pytest results pending. No live LLM or new
+real-data execution is claimed. Core analytics, event semantics, and other
+domain routes are unchanged. KPI denominator alignment remains pending.
+
+## Integration checkpoint — five-tool question routing verified
+
+- Full project test suite: 472 passed in 1.13s.
+- Command: .venv/bin/python -m pytest tests -q
+- Added 53 routing and orchestration tests.
+- Deterministic questions now reach all five analytics tools.
+- Tests verify scope preservation, direct-calculation parity,
+  report delivery, and clarification without tool calls.
+- Core analytics and exact +1 event semantics remain unchanged.
+- Running pytest without an explicit tests directory collected installer
+  backups and caused a module-name collision. Use pytest tests -q.
+- Live LLM routing and real-data execution of the four new routes
+  remain unverified.
+
+Next action:
+Verify the four new routes against real event data and save comparison
+evidence, reports, and traces.

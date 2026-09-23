@@ -108,101 +108,11 @@ def parse_intent(query: str) -> tuple[str, dict]:
 
 
 def _plan_torque_stats(query):
-    """Parse supported torque requests and preserve every explicit scope."""
-    from datetime import datetime, timedelta
+    """Compatibility hook for complete deterministic torque routing."""
+    from .torque_routing import parse_torque_request
 
-    text = " ".join((query or "").split()).rstrip(".?!")
-    if not re.search(r"\btorque\b", text, re.I):
-        return None
-
-    def clarify():
-        return Plan(
-            goal="Clarify the requested torque analysis and scope.",
-            ambiguous=True,
-            clarification=(
-                "Use aggregate torque statistics with an optional head, "
-                "machine, status, calendar date, or explicit time range. "
-                "For example: 'average torque for head 5 on 2026-02-01'. "
-                "Ranges use 'from <ISO timestamp> until <ISO timestamp>'; "
-                "the end is exclusive. Relative dates and other torque "
-                "analyses are not supported by this route yet."
-            ),
-            rationale="unsupported or conflicting torque scope; no tool called",
-        )
-
-    base = re.match(
-        r"(?:(?:what is|what are|show me|show) (?:the )?)?"
-        r"(?:torque (?:statistics|stats|summary)|"
-        r"(?:mean|average|minimum|maximum|standard deviation)(?: of)? torque)"
-        r"(?=\s|$)",
-        text, re.I,
-    )
-    if base is None:
-        return clarify()
-
-    patterns = [
-        ("head", r"(?:for\s+)?(?:head\s*[-#]?\s*|h)(\d+)(?=\s|$)"),
-        ("machine", r"(?:for\s+)?machine\s+([A-Za-z0-9_][A-Za-z0-9_-]*)(?=\s|$)"),
-        ("success", r"(?:for\s+)?successful\s+closures(?=\s|$)"),
-        ("status", r"(?:for\s+)?status\s+(-?\d+)(?=\s|$)"),
-        ("all", r"(?:for\s+)?all\s+closures(?=\s|$)"),
-        ("date", r"on\s+(\d{4}-\d{2}-\d{2})(?=\s|$)"),
-        ("range", r"from\s+(\S+)\s+until\s+(\S+)(?=\s|$)"),
-    ]
-
-    tail = text[base.end():].strip()
-    params = {}
-    while tail:
-        matched = None
-        for kind, pattern in patterns:
-            match = re.match(pattern, tail, re.I)
-            if match is not None:
-                matched = kind, match
-                break
-        if matched is None:
-            return clarify()
-
-        kind, match = matched
-        try:
-            if kind == "head":
-                number = int(match.group(1))
-                if number < 1:
-                    return clarify()
-                added = {"head_id": f"H{number:02d}"}
-            elif kind == "machine":
-                added = {"machine_id": match.group(1)}
-            elif kind == "success":
-                added = {"status_filter": "successful"}
-            elif kind == "status":
-                added = {"status_filter": int(match.group(1))}
-            elif kind == "all":
-                added = {"status_filter": None}
-            else:
-                lo = datetime.fromisoformat(match.group(1))
-                hi = (
-                    lo + timedelta(days=1) if kind == "date"
-                    else datetime.fromisoformat(match.group(2))
-                )
-                if lo.tzinfo is not None or hi.tzinfo is not None or lo >= hi:
-                    return clarify()
-                added = {"start": lo.isoformat(), "end": hi.isoformat()}
-        except (ValueError, OverflowError):
-            return clarify()
-
-        if params.keys() & added.keys():
-            return clarify()
-        params.update(added)
-        tail = tail[match.end():].strip()
-        if tail.lower().startswith("and "):
-            tail = tail[4:].strip()
-
-    params = {key: value for key, value in params.items() if value is not None}
-    return Plan(
-        goal="Summarise finite torque readings within the requested event scope.",
-        calls=[("torque_stats", params)],
-        filters=dict(params),
-        rationale="parsed complete torque request with explicit scope",
-    )
+    parsed = parse_torque_request(query)
+    return None if parsed is None else Plan(**parsed)
 
 
 

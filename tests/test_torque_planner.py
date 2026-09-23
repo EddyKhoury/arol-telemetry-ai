@@ -28,9 +28,9 @@ def test_supported_questions_route_to_torque(query, params):
     "Average torque for head 5 excluding H02",
     "Average torque from 2026-02-02 until 2026-02-01",
     "Average torque yesterday",
-    "Is torque drifting?",
-    "Compare torque between H01 and H02",
-    "Show torque distribution",
+    'Is torque drifting excluding head 3',
+    'Compare torque between H01 and H02 excluding head 3',
+    'Show torque distribution excluding head 3',
     "Average torque above 2 Nm",
 ])
 def test_unsupported_scope_is_not_silently_dropped(query):
