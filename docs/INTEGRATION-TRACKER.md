@@ -570,3 +570,29 @@ Limits:
 
 Next action:
 Review rejected/error cases before deciding whether to adjust the prompt/model or proceed to a live orchestration smoke test. Keep scope validation unchanged.
+
+## Integration measurement — live LLM routing 20260923-170639-310633
+
+- Source commit: 0c283b432e5cc7bb685666c3cf49684196aa9948.
+- Model: qwen2.5-coder:14b; fallback disabled; temperature 0; seed 42.
+- Completed all planned cases: True.
+- Supported questions attempted: 10 / 10.
+- Exact accepted: 0; rejected proposals: 10; request errors: 0.
+- Invariant failures across all cases: 0.
+- Exact acceptance / attempted supported cases: 0.0.
+- Separate pre-inference scope-gate outcomes: {'gate_blocked': 4}.
+- Latency (seconds, including load/errors): {'median': 4.3464, 'maximum': 7.9462}.
+- Evidence: benchmarks/integration/live_llm_routing_20260923-170639-310633.json.
+- Full replies and offered schemas: data/integration_smoke/live-llm-20260923-170639-310633.
+- Last full regression: 537 passed in 1.17s; this measurement does not change source.
+
+Limits:
+- Small hand-authored integration sample, not a held-out language benchmark.
+- One attempt per question; repeatability and statistical confidence are not measured.
+- Model acceptance is limited to the verified deterministic grammar.
+- Scope-gate blocks happen before inference and are excluded from model acceptance rate.
+- Requests that error or are rejected remain in the supported-case denominator.
+- Planning only: no analytics execution, report delivery, or real-data LLM end-to-end claim.
+
+Next action:
+Review rejected/error cases before deciding whether to adjust the prompt/model or proceed to a live orchestration smoke test. Keep scope validation unchanged.
