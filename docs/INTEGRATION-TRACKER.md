@@ -497,3 +497,50 @@ One previously built event file; H05 successful events for three tools; H05/H06 
 
 Next action:
 Review live LLM scope preservation and unsupported-argument handling before enabling model routing.
+
+## Integration batch — strict LLM proposal validation
+
+Previous verified regression: 472 passed in 1.13s. All five deterministic
+analytics routes have real-data parity evidence (torque_stats earlier;
+four additional routes at commit 7e5a42a82e27e49f55da607ae3d4f6a26df01edd).
+
+LLM proposals now require one registered tool, canonical argument names,
+valid types, and an exact match to the independently parsed requested
+analysis and scope. No argument or bound is dropped, no head-detail call
+is prepended, and invalid proposals stop before data loading or dispatch.
+Free-form model prose cannot supply report goals or findings.
+Transport/response-decoding failure can use the complete verified rules
+plan, with the existing fallback label in report/trace; disabling fallback
+preserves exceptions. Invalid structured proposals do not trigger fallback.
+Model availability requires the configured tag, not a matching name prefix.
+
+Deliberate scope boundary:
+- LLM planning is gated by the current deterministic torque grammar.
+- This does not demonstrate broader natural-language understanding.
+- Unverified phrasing and other KPI domains request clarification before
+  contacting the model. RulePlanner's other-domain behavior is unchanged.
+- No core analytics, configured limits, event semantics, or live LLM default
+  settings were changed. Runtime configuration stays application-owned.
+
+Mocked tests cover all five tools, omitted/changed/extra scope, malformed
+replies and JSON, duplicate JSON keys, exact model tags, configuration
+arguments, trace labels, and accepted/rejected actual orchestration.
+Status: installed; full regression pending. No live Ollama routing tested.
+Next action: run pytest tests -q, then evaluate live model proposals with
+fallback disabled and explicit accepted/rejected results.
+
+## Integration checkpoint — LLM scope validation verified
+
+- Full regression: 537 passed in 1.17s.
+- Command: .venv/bin/python -m pytest tests -q
+- Added 65 mocked LLM validation and orchestration tests.
+- Accepted proposals preserve the verified analysis and complete scope.
+- Invalid proposals request clarification without data loading or dispatch.
+- Transport fallback preserves scope and is labelled in the trace.
+- Model prose cannot supply report findings.
+- LLM acceptance remains bounded by the deterministic torque grammar.
+- Live model routing accuracy and latency remain unverified.
+
+Next action:
+Evaluate live Ollama proposals with fallback disabled, recording accepted,
+rejected and failed requests separately.

@@ -171,21 +171,7 @@ class RulePlanner(Planner):
         )
 
 
-SYSTEM_PROMPT = """You route questions about industrial capping-machine \
-telemetry to analysis tools. You do NOT answer the question yourself and you \
-NEVER compute, estimate or invent a number - deterministic Python functions do \
-all arithmetic.
-
-Choose one or more of the supplied tools that together answer the user's \
-question, and fill in only parameters the user actually specified. Omit any \
-parameter they did not mention rather than guessing a value.
-
-If the user names a specific head ("head 26", "H26"), call head_detail with \
-that head_id. The fleet-wide tools cannot report on a single head, so \
-answering with them would silently widen the question the user asked.
-
-If the question is not about capping telemetry, or is too vague to map onto a \
-tool, call no tools and reply with one short sentence saying what you need."""
+SYSTEM_PROMPT = 'You propose exactly one tool call for the supplied torque question. Use only the provided tools. Never compute or invent findings. Preserve every explicit head, machine, status and time filter exactly. Use canonical parameter names from the schema, not aliases. Head 5 means H05. Machine identifiers are case-sensitive. A date introduced by on means midnight that day inclusive until midnight the next day exclusive; use naive ISO timestamps with seconds. Do not add filters, default parameters, nulls, empty strings, or inferred scope. Omit parameters the user did not request. Successful closures means status_filter="successful"; explicit status 0 means integer 0. All closures means omit status_filter. Head comparison requires head_a/head_b and permits machine/time scope only. Configured windows, thresholds, sigma and limits are application-owned and cannot be arguments. If unable to produce the exact requested analysis and scope, return no tool calls. Your free-form response is not used as a report finding.'
 
 
 def _to_ollama_tools(specs: list[dict]) -> list[dict]:
@@ -200,20 +186,10 @@ def _to_ollama_tools(specs: list[dict]) -> list[dict]:
 
 
 class LLMPlanner(Planner):
-    """Model-driven planning over registry.get_tool_specs().
+    """Validate model proposals against the verified torque request grammar.
 
-    Talks to a local Ollama server, so the whole system runs offline: no API
-    key, no network, and - unlike a hosted endpoint, where server-side batching
-    makes even temperature 0 non-deterministic - a fixed seed makes the routing
-    itself reproducible.
-
-    The model only ever picks tool names and arguments. Every number in the
-    report still comes from tested Python, so a weak local model can misroute
-    but cannot produce a wrong figure.
-
-    Any failure - server down, model missing, timeout, unparseable reply -
-    falls back to RulePlanner rather than losing the answer. The trace records
-    which planner actually ran, so a report never misrepresents itself.
+    Unknown language needs clarification; the LLM does not expand grammar
+    coverage in this checkpoint. Model prose is not report evidence.
     """
 
     name = "llm"
@@ -231,8 +207,7 @@ class LLMPlanner(Planner):
         self._rules = RulePlanner()
         self.last_error: str | None = None
         self.dropped_args: list[str] = []
-
-    # -- transport ---------------------------------------------------------
+        self.validation_error: str | None = None
 
     def _chat(self, query: str, tools: list[dict]) -> dict:
         """One non-streaming call to Ollama. Overridden in tests."""
@@ -256,140 +231,76 @@ class LLMPlanner(Planner):
             return json.loads(response.read().decode("utf-8"))
 
     def available(self) -> bool:
-        """Is the server reachable and the model pulled?"""
+        """Require the configured model tag, allowing Ollama's implicit :latest."""
         import json
         import urllib.request
         try:
-            with urllib.request.urlopen(f"{self.host}/api/tags", timeout=3) as r:
-                names = [m.get("name", "") for m in json.loads(r.read()).get("models", [])]
-            return any(n == self.model or n.startswith(self.model.split(":")[0])
-                       for n in names)
+            with urllib.request.urlopen(f"{self.host}/api/tags", timeout=3) as response:
+                names = {item.get("name", "") for item in json.loads(response.read()).get("models", [])}
+            expected = self.model if ":" in self.model else self.model + ":latest"
+            return expected in names or self.model in names
         except Exception:
             return False
 
-    # -- planning ----------------------------------------------------------
 
     def plan(self, query: str, context: dict) -> Plan:
+        from .torque_routing import parse_torque_request
+        from .llm_validation import VERIFIED_TOOLS
+
         self.last_error = None
+        self.validation_error = None
         self.dropped_args = []
+        requested = parse_torque_request(query)
+        if requested is None:
+            return self._reject("This LLM checkpoint supports the five verified torque analyses only.")
+        expected = Plan(**requested)
+        if expected.ambiguous:
+            expected.rationale = "LLM scope gate requested clarification before contacting the model"
+            return expected
+
+        specs = [spec for spec in registry.get_tool_specs() if spec["name"] in VERIFIED_TOOLS]
+        # Only transport failure may fall back. Invalid proposals never trigger a
+        # different analysis or a second attempt with fewer filters.
         try:
-            specs = registry.get_tool_specs()
             reply = self._chat(query, _to_ollama_tools(specs))
-            message = reply.get("message", {}) or {}
-            calls = self._extract_calls(message)
-
-            if not calls:
-                text = (message.get("content") or "").strip()
-                return Plan(
-                    goal="Clarify what the user is asking for.",
-                    ambiguous=True,
-                    clarification=text or (
-                        "I could not map that to an analysis. Ask about "
-                        "anomalies, idle periods, throughput or KPIs."),
-                    rationale=f"{self.model} selected no tool",
-                )
-
-            goal = (message.get("content") or "").strip() or \
-                f"Answer: {query.strip()}"
-            calls, named_head = self._honour_named_head(query, calls)
-            if named_head:
-                goal = (f"Assess head {named_head} and place it against "
-                        f"the rest of the fleet.")
-            return Plan(goal=goal, calls=calls,
-                        filters=dict(calls[0][1]) if calls else {},
-                        rationale=f"{self.model} selected "
-                                  f"{', '.join(n for n, _ in calls)}")
-
         except Exception as exc:
             self.last_error = f"{type(exc).__name__}: {exc}"
             if not self.fallback:
                 raise
-            plan = self._rules.plan(query, context)
-            plan.rationale = (f"LLM planner unavailable ({self.last_error}); "
-                              f"fell back to rules - {plan.rationale}")
-            return plan
+            expected.rationale = (f"LLM transport failed ({self.last_error}); fell back to rules "
+                                  "with the complete verified request scope")
+            return expected
 
-    def _extract_calls(self, message: dict) -> list[tuple[str, dict]]:
-        """Keep only calls naming a registered tool with accepted parameters.
+        try:
+            if not isinstance(reply, dict):
+                raise ValueError("Model reply must be an object")
+            calls = self._extract_calls(reply.get("message"))
+            if calls != expected.calls:
+                raise ValueError("Model tool or arguments differ from the verified requested analysis and scope")
+        except (ValueError, TypeError, KeyError, OverflowError) as exc:
+            return self._reject(str(exc))
+        # Free-form model content is not report evidence and cannot become a goal
+        # containing unverified findings or causal claims.
+        return Plan(goal=expected.goal, calls=calls, filters=dict(expected.filters),
+                    rationale=f"{self.model} proposed one tool; analysis and complete scope verified")
 
-        A small local model will occasionally invent a tool or an argument.
-        call_tool would reject those anyway, but dropping them here saves a
-        wasted step and keeps the trace honest about what was really run.
-        """
-        calls: list[tuple[str, dict]] = []
-        for raw in message.get("tool_calls") or []:
-            function = raw.get("function", raw) or {}
-            name = function.get("name")
-            spec = registry.get(name) if name else None
-            if spec is None:
-                continue
-            args = function.get("arguments") or {}
-            if isinstance(args, str):
-                import json
-                try:
-                    args = json.loads(args)
-                except ValueError:
-                    args = {}
-            params, _ = registry.normalise_params(
-                {k: v for k, v in args.items() if v not in (None, "")})
-            kept = {k: v for k, v in params.items() if k in spec.params}
 
-            # The planner DROPS what it cannot use; call_tool REJECTS it.
-            # The difference is deliberate: an argument from a 3B model is
-            # noise to be absorbed, so the answer still gets produced, while
-            # the same argument from Person A's code or a test is a bug that
-            # should be loud. Both record what happened.
-            kept, _notes, bad = registry.coerce_params(kept)
-            self.dropped_args.extend(bad)
-            calls.append((name, self._drop_unusable_bounds(kept)))
-        return calls
+    def _reject(self, reason):
+        self.validation_error = reason
+        return Plan(
+            goal="Clarify the requested analysis without changing its scope.",
+            ambiguous=True,
+            clarification=("The LLM proposal could not be verified; no analysis was run. "
+                           "Use a supported torque question with explicit head, machine and time scope, "
+                           "or select deterministic rules. Reason: " + reason),
+            rationale="LLM proposal rejected: " + reason,
+        )
 
-    def _honour_named_head(self, query: str, calls: list) -> tuple[list, str | None]:
-        """If the user named a head, make sure something reports on THAT head.
 
-        RulePlanner has done this since head_detail was written. The LLM
-        planner did not, and on the first live run "is anything wrong with
-        head 26?" came back as a fleet-wide anomaly scan - the same silently
-        widened question head_detail exists to fix, reintroduced through a
-        different planner.
+    def _extract_calls(self, message):
+        from .llm_validation import strict_calls
+        return strict_calls(message, registry.get)
 
-        The model's own calls are kept and head_detail is prepended, so the
-        report answers the question asked AND the wider one. Putting the rule
-        in the system prompt is not enough by itself: a 3B model follows an
-        instruction most of the time, not every time.
-        """
-        heads = [f"H{int(m):02d}" for m in HEAD_RE.findall(query)]
-        if not heads or registry.get("head_detail") is None:
-            return calls, None
-        if any(name == "head_detail" or params.get("head_id")
-               for name, params in calls):
-            return calls, None
-        head = heads[0] if len(heads) == 1 else heads
-        return [("head_detail", {"head_id": head})] + list(calls), head
-
-    def _drop_unusable_bounds(self, params: dict) -> dict:
-        """Remove start/end values the time parser cannot read.
-
-        A 3B model reaches for wall-clock language - `start="now"`,
-        `end="today"` - because that is how the question was phrased. Those
-        are not ISO-8601, so parse_bound raises and the tool fails.
-
-        They are dropped rather than resolved. "now" would resolve to the real
-        clock, and the pool it would be applied to is a February window, so
-        resolving is an empty result dressed up as an answer. Dropping widens
-        the window instead, which is the honest degradation: the report's
-        "filters applied" line then shows what was actually used.
-        """
-        out = {}
-        for key, value in params.items():
-            if key in ("start", "end"):
-                try:
-                    timeutils.parse_bound(value)
-                except ValueError:
-                    self.dropped_args.append(f"{key}={value!r} (not ISO-8601)")
-                    continue
-            out[key] = value
-        return out
 
 
 def get_planner(cfg) -> Planner:
