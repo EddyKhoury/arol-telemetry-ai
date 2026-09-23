@@ -6373,3 +6373,80 @@ Limits:
 Next action:
 Verify a scoped head query against the saved real event Parquet,
 comparing its result with an explicitly filtered direct calculation.
+
+## Integration checkpoint — scoped real-data torque verified
+
+- Verified clean commit: b4ddff87c360e5e25b0533168aebbf53fd09ad97.
+- Query: Average torque for head 5 for machine MCC777eda3db57348ef8a3113a642ae74db from 2026-02-01T00:00:00 until 2026-02-01T12:00:00 for successful closures
+- Source events: 765,703.
+- Selected successful events / finite torque samples: 7,575 / 7,575.
+- Mean torque: 1.9957486468646866 Nm.
+- Minimum / maximum torque: 0.0 / 2.173 Nm.
+- Sample standard deviation: 0.03983402226443763 Nm.
+- Direct and reported results agree within relative/absolute tolerance 1e-12.
+  The last floating-point digits of standard deviation differ; equality is not claimed.
+- All five requested parameters reached the tool unchanged.
+- One deterministic tool call; no live LLM routing tested.
+- Evidence, including source-code hashes: benchmarks/integration/torque_stats_scoped_real_2026-02-01.json.
+- Reports and trace remain under data/integration_smoke.
+- Last completed regression before the new batch: 384 passed in 1.04s.
+
+## Integration batch — four analytics tools added; tests pending
+
+Prepared wrappers for torque_distribution, torque_trend,
+detect_torque_anomalies and head_correlation, using the existing A functions.
+Added deterministic report templates and application-owned configuration
+dispatch. Config, thresholds and rolling windows are not model parameters.
+Unknown arguments are rejected before placeholder coercion can remove them.
+Correlation requires one machine and rejects duplicate head/timestamp
+pairings; it does not deduplicate or change A's underlying calculation.
+A's non-No-Load success denominator is retained and explicitly distinguished
+from B's cap-present KPI denominator; final denominator alignment is pending.
+Trend direction remains A's numerical-epsilon classification, not a statement
+of engineering or statistical significance. Selected trend/anomaly data are
+pooled, and no pre-window history is added to a scoped trend calculation.
+
+New tests cover parity with all four existing functions, scope, empty input,
+configuration isolation, invalid arguments, ambiguous correlations, reports,
+and trusted configuration passing through the orchestrator.
+
+Status: implementation installed; run pytest before marking this batch verified.
+Natural-language routing for these four tools is the next task. The existing
+scoped torque_stats route remains active. No merge or live LLM validation done.
+
+## Integration checkpoint — all five analytics wrappers verified
+
+This checkpoint supersedes the preceding batch's verification-pending status.
+
+Verified:
+- Registered wrappers for torque_distribution, torque_trend,
+  detect_torque_anomalies and head_correlation.
+- All five analytics tools now have wrappers and report templates.
+- Existing Person A analytics functions remain unchanged.
+- Configuration is supplied by trusted runtime dispatch and isolated
+  between calls; tool arguments cannot override runtime settings.
+- Unknown arguments are rejected before placeholder coercion.
+- Head correlation rejects cross-machine and duplicate-timestamp pairings.
+- A's success denominator is preserved and explicitly distinguished
+  from B's cap-present KPI denominator.
+- Reports describe results without asserting machine health or causation.
+
+Tests:
+- Added 35 tests covering calculation parity, scope, empty data,
+  configuration isolation, invalid arguments, correlation safeguards,
+  report output and orchestrator configuration passing.
+- Full regression: 419 passed in 1.12s.
+
+Real-data evidence:
+- The preceding scoped torque_stats verification is now recorded in
+  benchmarks/integration/torque_stats_scoped_real_2026-02-01.json.
+
+Remaining:
+- Natural-language routing for the four newly registered tools.
+- Real-data verification of those tools.
+- Live LLM routing and broader diagnostic evaluation.
+- Final agreement on KPI denominators and other shared assumptions.
+
+Next action:
+Add deterministic question routes for distributions, trends, anomalies
+and head comparisons while preserving requested scope.

@@ -20,7 +20,7 @@ import re
 from dataclasses import dataclass, field
 
 from ..common import registry, timeutils
-from ..analytics import registered_torque  # noqa: F401
+from ..analytics import registered_torque, registered_analytics  # noqa: F401
 
 
 @dataclass

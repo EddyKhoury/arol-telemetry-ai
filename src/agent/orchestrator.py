@@ -7,8 +7,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..common import config as config_mod
-from ..common import datasource, registry
-from ..analytics import registered_torque  # noqa: F401
+from ..common import datasource
+from ..common.runtime import dispatch_tool
+from ..analytics import registered_torque, registered_analytics  # noqa: F401
 from . import report as report_mod
 from .planner import get_planner
 from .trace import Trace
@@ -96,7 +97,9 @@ class Orchestrator:
 
         results = []
         for tool_name, params in plan.calls[:self.max_steps]:
-            result = registry.call_tool(tool_name, events, **params)
+            result = dispatch_tool(
+                tool_name, events, config=self.cfg, arguments=params
+            )
             trace.tool_call(tool_name, params, result)
 
             if not result["ok"]:

@@ -24,6 +24,12 @@ from . import envelope as env
 # --- the frozen parameter vocabulary (F4) ---------------------------------
 
 PARAM_VOCABULARY: dict[str, dict] = {
+    "bins": {"type": "integer", "minimum": 1, "default": 10,
+             "description": "Number of equal-width histogram bins."},
+    "head_a": {"type": "string", "minLength": 1,
+               "description": "First head identifier, for example H01."},
+    "head_b": {"type": "string", "minLength": 1,
+               "description": "Second, distinct head identifier, for example H05."},
     "status_filter": {
         "oneOf": [
             {"type": "null"},
@@ -96,6 +102,7 @@ class ToolSpec:
                 "type": "object",
                 "properties": props,
                 "required": list(self.required),
+                "additionalProperties": False,
             },
         }
 
@@ -223,7 +230,13 @@ def coerce_params(params: dict) -> tuple[dict, list[str], list[str]]:
     notes: list[str] = []
     errors: list[str] = []
     for key, value in params.items():
-        if key in {"start", "end", "head_id", "machine_id"}:
+        if key == "bins":
+            if type(value) is not int or value <= 0:
+                errors.append(f"bins={value!r} must be a positive integer")
+                continue
+            out[key] = value
+            continue
+        if key in {"start", "end", "head_id", "machine_id", "head_a", "head_b"}:
             values = (
                 value if key == "head_id" and isinstance(value, list)
                 else [value]
@@ -287,16 +300,16 @@ def call_tool(name: str, events, **params) -> dict:
         )
 
     params, renames = normalise_params(params)
-    params, coercions, type_errors = coerce_params(params)
-    if type_errors:
-        return env.failure(f"{name}: " + "; ".join(type_errors),
-                           tool=name, params=params)
     unknown = [p for p in params if p not in spec.params]
     if unknown:
         return env.failure(
             f"{name} does not accept {unknown}; it accepts {spec.params}",
             tool=name, params=params,
         )
+    params, coercions, type_errors = coerce_params(params)
+    if type_errors:
+        return env.failure(f"{name}: " + "; ".join(type_errors),
+                           tool=name, params=params)
     missing = [p for p in spec.required if p not in params]
     if missing:
         return env.failure(f"{name} requires {missing}", tool=name,

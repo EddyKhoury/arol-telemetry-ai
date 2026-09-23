@@ -179,7 +179,75 @@ def _finding_torque_stats(result, meta):
     return lines
 
 
+def _analytics_number(value):
+    return "n/a" if value is None else f"{value:.6g}"
+
+
+def _finding_torque_distribution(result, meta):
+    if result["sample_size"] == 0:
+        return ["- No finite torque observations matched; no histogram is available."]
+    counts = result["counts"]
+    shown = counts[:20]
+    label = "Bin counts" if len(counts) <= 20 else "First 20 bin counts"
+    return [
+        f"- Histogram: {result['sample_size']:,} finite observations in {len(counts)} bins.",
+        f"- Bin-edge range: {_analytics_number(result['bin_edges'][0])} to "
+        f"{_analytics_number(result['bin_edges'][-1])} Nm.",
+        f"- {label}: {shown}.",
+    ]
+
+
+def _finding_torque_trend(result, meta):
+    if result["sample_size"] == 0:
+        return ["- No finite torque observations matched; no trend can be estimated."]
+    return [
+        f"- Moving average uses a {result['window_seconds']} s trailing window over "
+        f"{result['sample_size']:,} finite observations.",
+        f"- Latest-window slope: {_analytics_number(result['drift_slope_per_second'])} Nm/s; "
+        f"numerical direction: {result['drift_direction']}.",
+        "- This numerical signal alone does not establish an engineering problem or its cause.",
+    ]
+
+
+def _finding_torque_anomalies(result, meta):
+    if result["sample_size"] == 0:
+        return ["- No finite torque observations matched; anomaly absence cannot be assessed."]
+    lines = [
+        f"- {result['anomaly_count']:,} of {result['sample_size']:,} observations flagged "
+        f"({_pct(result['anomaly_rate'])}).",
+        f"- Configured limits: {result['expected_min']} to {result['expected_max']} Nm; "
+        f"statistical threshold: {result['sigma']} sample standard deviations.",
+    ]
+    for item in result["anomalies"][:3]:
+        lines.append(f"- Example: {item['head_id']} at {item['ts']}, "
+                     f"{_analytics_number(item['torque'])} Nm; reason: {item['reason']}.")
+    lines.append("- Flags describe the configured checks; they do not identify a physical cause.")
+    return lines
+
+
+def _finding_head_correlation(result, meta):
+    lines = [
+        f"- Matched finite torque pairs: {result['matched_torque_samples']:,}; "
+        f"Pearson correlation: {_analytics_number(result['torque_correlation'])} "
+        f"({result['torque_correlation_interpretation']}).",
+        "- Person A denominator: non-null error_class other than No Load. "
+        "This is distinct from the cap-present KPI denominator.",
+    ]
+    for side in ("head_a", "head_b"):
+        head = result[side]
+        lines.append(f"- {head['head_id']}: {head['event_count']:,} events; "
+                     f"mean torque {_analytics_number(head['mean_torque'])} Nm; "
+                     f"success {_pct(head['success_rate'])} "
+                     f"({head['success_count']:,}/{head['success_evaluable_count']:,}).")
+    lines.append("- Correlation does not establish causation.")
+    return lines
+
+
 FINDING_TEMPLATES = {
+    "torque_distribution": _finding_torque_distribution,
+    "torque_trend": _finding_torque_trend,
+    "detect_torque_anomalies": _finding_torque_anomalies,
+    "head_correlation": _finding_head_correlation,
     "torque_stats": _finding_torque_stats,
     "success_rate": _finding_success_rate,
     "success_rate_per_head": _finding_success_rate_per_head,
@@ -284,6 +352,11 @@ def _next_checks(ok_results, failed) -> list[str]:
     checks: list[str] = []
     for name, result in ok_results:
         r = result["result"]
+        if name in {"torque_distribution", "torque_trend", "detect_torque_anomalies", "head_correlation"}:
+            if result["meta"].get("n", 0) == 0:
+                checks.append("- Verify the requested scope and observation coverage before interpreting an empty result.")
+            else:
+                checks.append("- Review observation coverage and process context before drawing operational conclusions.")
         if name == "torque_stats":
             if r["sample_size"] == 0:
                 checks.append(
