@@ -251,3 +251,49 @@ Next action:
 Run one real telemetry file through A's event builder, event Parquet,
 PersonASource, deterministic planner, orchestrator, report and trace.
 Compare the wrapped statistics against a direct torque_stats calculation.
+
+## Integration checkpoint — first real-data torque report verified
+
+Completed the first deterministic real-data vertical slice:
+
+CSV -> Person A event builder -> event Parquet -> PersonASource ->
+RulePlanner -> registry -> torque_stats -> report and trace.
+
+Evidence:
+- Input: telemetry_MCC777eda3db57348ef8a3113a642ae74db_2026-02-01.csv
+- Input SHA-256: 679622a73fd54a051fc0507ed5faff75cc1575fb0b5261f517d9314840a1911e
+- Tested code commit: ec766753c06d7c4291af7a9a96e25c284d49cd75
+- Raw rows: 86,399
+- Raw timestamp range: 2026-01-31T16:00:00 to 2026-02-01T15:59:59
+- Observed exact +1 events: 765,703
+- Event count agrees with the independent counter audit.
+- All eight original event fields were preserved.
+- Query: Average torque for successful closures
+- Planner: rules; tool calls: 1; outcome: ok.
+- Finite successful-closure torque observations: 427,772
+- Mean torque: 1.996996423328315 Nm.
+- Minimum / maximum: 0.0 / 2.317 Nm.
+- Sample standard deviation: 0.035846607419704545 Nm.
+- Direct and reported statistics matched exactly in this run.
+- Verification permits floating-point relative/absolute tolerance of 1e-12.
+
+Artifacts:
+- Portable verification evidence: benchmarks/integration/torque_stats_real_2026-02-01.json
+- Report and trace remain local under data/integration_smoke.
+- Last full regression: 347 passed in 1.01s.
+
+Limits:
+- Verified one supplied CSV file, not the complete 89-file pool.
+- First observation is a counter baseline; no preceding-file boundary tested.
+- Filename date is not assumed to be a calendar-day window.
+- Source timezone remains unconfirmed; no timezone conversion was applied.
+- Zero torque was retained by the existing finite-value calculation.
+  Its physical interpretation requires separate investigation.
+- Live LLM routing and the other analytics tools remain pending.
+
+Status:
+First deterministic torque_stats vertical slice verified on real telemetry.
+
+Next action:
+Extend the tool's supported head, machine and time filters with explicit
+scope-preservation tests, then expand routing and the remaining tools.

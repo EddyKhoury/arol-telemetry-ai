@@ -1,0 +1,46 @@
+{
+  "git_commit": "ec766753c06d7c4291af7a9a96e25c284d49cd75",
+  "input_file": "telemetry_MCC777eda3db57348ef8a3113a642ae74db_2026-02-01.csv",
+  "input_sha256": "679622a73fd54a051fc0507ed5faff75cc1575fb0b5261f517d9314840a1911e",
+  "raw_rows": 86399,
+  "raw_ts_min": "2026-01-31T16:00:00",
+  "raw_ts_max": "2026-02-01T15:59:59",
+  "observed_exact_plus_one_events": 765703,
+  "event_count_matches_counter_audit": true,
+  "original_eight_event_fields_preserved": true,
+  "query": "Average torque for successful closures",
+  "planner": "rules",
+  "status": "ok",
+  "direct_statistics": {
+    "mean": 1.996996423328315,
+    "min": 0.0,
+    "max": 2.317,
+    "std": 0.035846607419704545,
+    "sample_size": 427772
+  },
+  "reported_statistics": {
+    "mean": 1.996996423328315,
+    "min": 0.0,
+    "max": 2.317,
+    "std": 0.035846607419704545,
+    "sample_size": 427772
+  },
+  "statistics_match": true,
+  "float_comparison_tolerance": {
+    "relative": 1e-12,
+    "absolute": 1e-12
+  },
+  "contributing_data_window": {
+    "ts_min": "2026-01-31T16:09:36",
+    "ts_max": "2026-02-01T15:59:59"
+  },
+  "tool_calls": 1,
+  "warnings": [
+    "These are observed exact +1 closure events. count_delta=1 and inferred=False describe the supplied events. Counter discontinuities are not reconstructed, and total production completeness is not measured by this adapter."
+  ],
+  "artifacts": {
+    "report": "data/integration_smoke/20260923-175621-963226/reports/report-20260923-175622.md",
+    "trace": "data/integration_smoke/20260923-175621-963226/traces/trace-20260923-175622.json"
+  },
+  "scope": "One supplied CSV file. Its first observation is a counter baseline. No preceding-file boundary or live LLM routing was tested."
+}
