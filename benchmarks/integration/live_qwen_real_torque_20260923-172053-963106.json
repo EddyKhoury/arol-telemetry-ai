@@ -1,0 +1,138 @@
+{
+  "verified": true,
+  "error": null,
+  "git_commit": "aaade91a6c10739cac8b8772ff1d3d933353bb61",
+  "git_status_before_run": "",
+  "source_code_sha256": {
+    "src/agent/diagnostic_queries.py": "c3dc924e7c59bf03ef05b189f1429c10f221608034bb349cf841026cec891e18",
+    "src/agent/llm_validation.py": "54a7992a359ee491ab28646200b7a1842d11dc93fd07438fbf7539bd41929db8",
+    "src/agent/orchestrator.py": "6187178302aac7590e75dc5339e4b04814a88816c15881fde1f3f0f76318a832",
+    "src/agent/planner.py": "4c728299d0fcab403bee9e2758b86864287284a312dfaac1ea2c20e513aebd9c",
+    "src/agent/report.py": "92c60335943125482461947fad8936e172e6d24937641d7276f3144a8174f637",
+    "src/agent/tool_executor.py": "2106b4c76aea2b7de98ad2b3f799d48fe00f74c1299200b72d439ecae37bca0f",
+    "src/agent/tool_schemas.py": "5abbf987bfd8fc9f2aa8328d28a5b3392e9b6b9b0aed97cf48b3e1e66a8be1df",
+    "src/agent/torque_routing.py": "5b073b7dabb29a2f2d44124a4a8c7305def33fb966195762158f81badee4aeb6",
+    "src/agent/trace.py": "5f38428107ff64baff63441314c0bc9ef19c260162c5e452d7d00489beca8909",
+    "src/analytics/anomaly_detection.py": "d9dc2fe9ddf753009caac82d5d7fc982c51ad13314ab5af4a83e7a61c94c5291",
+    "src/analytics/capping_speed.py": "f21952a689f366d1698b70593fd7e4192a9bf4852c36e25934bb9b627fdb3608",
+    "src/analytics/capping_speed_polars.py": "22eb8e5eec6fa3680c43ff2caa7e10d5924ffa6fa538b62b5caf47a1772ad7c8",
+    "src/analytics/event_filters.py": "052519f23a2d91108f74a9e6d8ff78666d045b030f02cb70425a1288f784b48c",
+    "src/analytics/head_correlation.py": "afdf07846b41b616178061e03297a9a963f4c91756bb6396cf95e9e327a5368e",
+    "src/analytics/registered_analytics.py": "823f758bd3e6920582a71e4e22fa2cc511fac782c36098632d95f9466bcc7ac8",
+    "src/analytics/registered_torque.py": "11dfe27125cd756c028ef39c8d6446d3f43ef11ede60393cdb316f7db69667db",
+    "src/analytics/torque_distribution.py": "10196f164febf842e2009807f084251622bbaa64f25cb87b508301f15a37b9a1",
+    "src/analytics/torque_stats.py": "b36efa1493362eadf516cead88900fe1a77c12c6fde4a0397b8d91992f42efad",
+    "src/analytics/trend_analysis.py": "5c08c1a569c03d41ae5ccc2f321e9ee9a46152e926889e205e2f272630c73ebd",
+    "src/common/__init__.py": "2339dc897f33231aece0d2192d31c42aa6a9d10da8b32a3b0b55aa092d640be0",
+    "src/common/config.py": "5d2b9c28567f4ae88af6f75b7883eba584292e09deb54d62f0f09d381087bfd9",
+    "src/common/datasource.py": "0b89f7b246eb9929fa1128e54c28676e16b6f0c28f04bbafe0f4b0f7790dc5b4",
+    "src/common/envelope.py": "abb13193059b4e441ee959e0f68a765c9e8c6954e05ed858e0062ed50a15e98f",
+    "src/common/registry.py": "1b3ff1bc84c8d46be13d6b3be7ae4c15132a9ca04253741f01013e4dd7254788",
+    "src/common/runtime.py": "21d440ae9e241fbc327c404e38022c8db039e525255040aff424c7281ad7222d",
+    "src/common/schema.py": "ec55f4f1b58a69b63344eadac39202c24cdcb4aed6c246effd1f2e58d90c40c9",
+    "src/common/timeutils.py": "2d66977c3327b8daeccbc3415b9af7e0fd6552329a1b40e0dbf489efe0496de4",
+    "src/ingestion/adapter.py": "c07833ceb1795b5ce9eb55c94395d1f4cac0ca7923be4dfc46ed56d357b90b45",
+    "src/ingestion/closure_detection.py": "69a0c93a61151be7d5919e00473b72cda21815fc2caf5000d19667197e482747",
+    "src/ingestion/closure_detection_polars.py": "0a02c73bf8595e12b56ebe580f181c8e165324f167c5fdcbac2f3856b3fee357",
+    "src/ingestion/conversion.py": "f74837786068ca4e298fb6bf48d2ab549777b75df54ba6e80b160d68fc972c58",
+    "src/ingestion/event_assembly.py": "cdb68607a1d8d71b0c8be52a36ea1b22c6ec3762bd087a1dfd35f3442327b3c7",
+    "src/ingestion/event_assembly_polars.py": "c47006d1bad02a8fa6e89883074a9e4b2b585adf9577a6eb219378196d47a266",
+    "src/ingestion/event_table.py": "23a53c358987421318deb979de6b5b750638a178a80af5350b16c2fc0c510c14",
+    "src/ingestion/event_table_polars.py": "bcd1e135763a68598bd5c27dd16f4819d6c8bf076dd487561f245f48c7a0ed08",
+    "src/ingestion/loader.py": "eb9e84f9dbe109fd6161ab69a06212f7bec14f512ce36753e67a3ffa43b2b214",
+    "src/ingestion/validation.py": "4b95d2bfa1df7935fc6a50e5264b4a2e8636e1e61ac21a021bfb32b78d7c18f6",
+    "src/ingestion/validation_polars.py": "0c006f35c1ca624dac6736bdf633a609ec8fedd387c358e9838b6d90c12b94a1"
+  },
+  "runner_sha256": "5a2e49cb9fb2f2ec164a2cbcd7b7e03485141d7d862293506056758781046403",
+  "system_prompt_sha256": "a22a6f740ede7dc11d7b76bb3b45472a285a0cedeb3e3ee6709f16628602a79f",
+  "model": "qwen2.5-coder:14b",
+  "model_reported_by_server": "qwen2.5-coder:14b",
+  "settings": {
+    "fallback_to_rules": false,
+    "temperature": 0.0,
+    "seed": 42,
+    "timeout_seconds": 60
+  },
+  "live_model_requests": 1,
+  "model_elapsed_seconds": 7.75316091591958,
+  "orchestration_and_checks_elapsed_seconds": 7.81529916706495,
+  "query": "Average torque for machine MCC777eda3db57348ef8a3113a642ae74db from 2026-02-01T00:00:00 until 2026-02-01T12:00:00 for head 5 for successful closures",
+  "expected_parameters": {
+    "machine_id": "MCC777eda3db57348ef8a3113a642ae74db",
+    "start": "2026-02-01T00:00:00",
+    "end": "2026-02-01T12:00:00",
+    "head_id": "H05",
+    "status_filter": "successful"
+  },
+  "plan": {
+    "goal": "Run torque_stats within the explicitly requested event scope.",
+    "calls": [
+      [
+        "torque_stats",
+        {
+          "end": "2026-02-01T12:00:00",
+          "head_id": "H05",
+          "machine_id": "MCC777eda3db57348ef8a3113a642ae74db",
+          "start": "2026-02-01T00:00:00",
+          "status_filter": "successful"
+        }
+      ]
+    ],
+    "filters": {
+      "machine_id": "MCC777eda3db57348ef8a3113a642ae74db",
+      "start": "2026-02-01T00:00:00",
+      "end": "2026-02-01T12:00:00",
+      "head_id": "H05",
+      "status_filter": "successful"
+    },
+    "ambiguous": false,
+    "clarification": "",
+    "rationale": "qwen2.5-coder:14b proposed one tool; analysis and complete scope verified"
+  },
+  "status": "ok",
+  "validation_error": null,
+  "planner_last_error": null,
+  "input_event_file": "data/integration_smoke/20260923-175621-963226/events.parquet",
+  "input_sha256": "c38e6ee2f994df52eb04ea360779741888c52234f30f1647fc9f3e29a9af9ca3",
+  "source_events": 765703,
+  "independently_selected_events": 7575,
+  "direct_statistics": {
+    "mean": 1.9957486468646866,
+    "min": 0.0,
+    "max": 2.173,
+    "std": 0.039834022264437635,
+    "sample_size": 7575
+  },
+  "reported_statistics": {
+    "mean": 1.9957486468646866,
+    "min": 0.0,
+    "max": 2.173,
+    "std": 0.03983402226443763,
+    "sample_size": 7575
+  },
+  "statistics_match": true,
+  "float_comparison_tolerance": {
+    "relative": 1e-12,
+    "absolute": 1e-12
+  },
+  "contributing_data_window": {
+    "ts_min": "2026-02-01T00:02:19",
+    "ts_max": "2026-02-01T11:56:29"
+  },
+  "tool_calls": 1,
+  "trace_planner": "llm",
+  "artifacts": {
+    "report": "data/integration_smoke/live-qwen-report-20260923-172053-963106/reports/report-20260923-192101.md",
+    "trace": "data/integration_smoke/live-qwen-report-20260923-172053-963106/traces/trace-20260923-192053.json"
+  },
+  "raw_reply": "data/integration_smoke/live-qwen-report-20260923-172053-963106/model_reply.json",
+  "raw_reply_sha256": "16eb6092317105638808f31f0baa0e693d26f2876cf754a7c8c43bfedc822b9c",
+  "details": "data/integration_smoke/live-qwen-report-20260923-172053-963106",
+  "limits": [
+    "One fresh request using a question from the earlier evaluation; not held-out accuracy evidence.",
+    "LLM acceptance remains bounded by the verified deterministic grammar.",
+    "One previously verified event file; no preceding-file boundary tested.",
+    "Only observed exact +1 events; no reconstruction or total-production claim.",
+    "Statistics do not establish engineering compliance, machine health, or root cause."
+  ]
+}

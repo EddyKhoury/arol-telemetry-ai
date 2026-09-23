@@ -6688,3 +6688,29 @@ Next action: review replay outcomes and regression results before changing promp
 Next action:
 Run a fresh scoped Qwen request through the real-data orchestrator,
 verify calculation parity, and save its report and trace.
+
+## Integration measurement — fresh Qwen real-data report 20260923-172053-963106
+
+- Source commit: aaade91a6c10739cac8b8772ff1d3d933353bb61.
+- Model: qwen2.5-coder:14b; one fresh request; fallback disabled.
+- Complete verification passed: True.
+- Outcome: ok; error: None.
+- Live model requests: 1; analytics calls: 1.
+- Model latency: 7.75316091591958 seconds.
+- Trace planner: llm.
+- Direct finite sample size: 7575; mean: 1.9957486468646866 Nm.
+- Direct/reported parity passed: True; float tolerance relative/absolute 1e-12.
+- When verified, checks include exact requested scope, preservation of original
+  event fields, contributing window, saved report, and saved LLM-labelled trace.
+- Evidence: benchmarks/integration/live_qwen_real_torque_20260923-172053-963106.json.
+- Full model reply, report, trace and runner: data/integration_smoke/live-qwen-report-20260923-172053-963106.
+- Last full regression: 570 passed in 1.42s; this run does not change source.
+
+Limits:
+- One fresh request using a question from the earlier evaluation; not held-out accuracy evidence.
+- LLM acceptance remains bounded by the verified deterministic grammar.
+- One previously verified event file; no preceding-file boundary tested.
+- Only observed exact +1 events; no reconstruction or total-production claim.
+- Statistics do not establish engineering compliance, machine health, or root cause.
+
+Next action: review remaining multi-file, diagnostic-routing and delivery gaps before final integration.
