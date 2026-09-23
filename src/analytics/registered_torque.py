@@ -4,6 +4,7 @@ import polars as pl
 
 from ..common.envelope import data_window, envelope
 from ..common.registry import tool
+from .event_filters import filter_events
 from .torque_stats import (
     _apply_status_filter,
     torque_stats as calculate_torque_stats,
@@ -17,21 +18,24 @@ from .torque_stats import (
         "torque readings from observed exact +1 closure events. "
         "Optionally select successful closures or an exact status code."
     ),
-    params=["status_filter"],
+    params=["start", "end", "head_id", "machine_id", "status_filter"],
     agent="analytics",
     owner="A",
 )
-def registered_torque_stats(events, *, status_filter=None):
+def registered_torque_stats(events, *, status_filter=None,
+                            start=None, end=None, head_id=None, machine_id=None):
     # The existing analytics function remains responsible for the numbers.
-    result = calculate_torque_stats(events, status_filter=status_filter)
+    scoped, applied = filter_events(
+        events, start=start, end=end, head_id=head_id, machine_id=machine_id
+    )
+    result = calculate_torque_stats(scoped, status_filter=status_filter)
 
     # Metadata describes the observations actually used in the calculation.
-    lazy = events.lazy() if isinstance(events, pl.DataFrame) else events
-    used = _apply_status_filter(lazy, status_filter).filter(
+    used = _apply_status_filter(scoped, status_filter).filter(
         pl.col("torque").is_not_null() & pl.col("torque").is_finite()
     ).collect()
 
-    filters = ["torque is non-null and finite"]
+    filters = applied + ["torque is non-null and finite"]
     if status_filter is not None:
         filters.insert(0, f"status_filter={status_filter!r}")
 

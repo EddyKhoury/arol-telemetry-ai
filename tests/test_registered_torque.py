@@ -99,13 +99,15 @@ def test_missing_torque_returns_failure(events):
     assert "Missing required event columns" in response["error"]
 
 
-def test_schema_exposes_only_status_filter():
+def test_schema_exposes_supported_filters():
     spec = next(
         item for item in get_tool_specs()
         if item["name"] == "torque_stats"
     )
     properties = spec["input_schema"]["properties"]
-    assert set(properties) == {"status_filter"}
+    assert set(properties) == {
+        "start", "end", "head_id", "machine_id", "status_filter"
+    }
     assert properties["status_filter"]["oneOf"] == [
         {"type": "null"},
         {"type": "string", "enum": ["successful"]},

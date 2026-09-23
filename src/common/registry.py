@@ -223,6 +223,23 @@ def coerce_params(params: dict) -> tuple[dict, list[str], list[str]]:
     notes: list[str] = []
     errors: list[str] = []
     for key, value in params.items():
+        if key in {"start", "end", "head_id", "machine_id"}:
+            values = (
+                value if key == "head_id" and isinstance(value, list)
+                else [value]
+            )
+            if not values or any(
+                not isinstance(item, str)
+                or item.strip().lower() in _NULLISH
+                for item in values
+            ):
+                errors.append(
+                    f"{key}={value!r} is not a valid explicit scope; "
+                    "omit the argument if no filter is intended"
+                )
+                continue
+            out[key] = value
+            continue
         if isinstance(value, str) and value.strip().lower() in _NULLISH:
             notes.append(f"{key}={value!r} treated as not supplied")
             continue

@@ -25,8 +25,8 @@ def test_supported_questions_route_to_torque(query, params):
 
 
 @pytest.mark.parametrize("query", [
-    "Average torque for head 5",
-    "Average torque on 2026-02-01",
+    "Average torque for head 5 excluding H02",
+    "Average torque from 2026-02-02 until 2026-02-01",
     "Average torque yesterday",
     "Is torque drifting?",
     "Compare torque between H01 and H02",

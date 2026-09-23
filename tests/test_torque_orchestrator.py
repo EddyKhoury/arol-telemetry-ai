@@ -86,7 +86,7 @@ def test_unsupported_scope_stops_before_loading(setup):
     cfg, path = setup
     path.unlink()
     answer = Orchestrator(cfg=cfg).answer(
-        "Average torque for head 5", pool="fixture"
+        "Average torque for head 5 yesterday", pool="fixture"
     )
     assert answer["status"] == "needs_clarification"
     assert answer["results"] == []
@@ -114,7 +114,7 @@ def test_missing_data_is_reported(setup):
 
 def test_failed_filter_is_never_removed_and_retried(setup):
     cfg, _ = setup
-    engine = Orchestrator(cfg=cfg, planner=FixedPlanner({"head_id": "H99"}))
+    engine = Orchestrator(cfg=cfg, planner=FixedPlanner({"start": "not-a-date"}))
     answer = engine.answer("Scoped request", pool="fixture")
     assert answer["status"] == "degraded"
     assert answer["results"][0][1]["ok"] is False

@@ -6330,3 +6330,46 @@ First deterministic torque_stats vertical slice verified on real telemetry.
 Next action:
 Extend the tool's supported head, machine and time filters with explicit
 scope-preservation tests, then expand routing and the remaining tools.
+
+## Integration checkpoint — scoped torque queries verified
+
+Implemented:
+- Added shared event filtering for head_id, machine_id, start and end.
+- Registered torque_stats accepts these filters alongside status_filter.
+- Start is inclusive; end is exclusive.
+- Tool-level head filtering accepts one head or a list of heads.
+- Metadata describes the finite observations used after all filters.
+- Blank, null-like and incorrectly typed scope arguments return errors
+  instead of silently becoming omitted filters.
+- Valid filters with no matching events return empty statistics.
+- Timezone-aware bounds and invalid time ranges are rejected.
+
+Deterministic routing:
+- Supports a single named head, an exact machine identifier,
+  successful closures or a numeric status, and explicit dates/ranges.
+- Head 5 maps to H05; machine identifier case is preserved.
+- Calendar dates select midnight to the following midnight using
+  timestamps as stored, without timezone conversion.
+- Explicit ranges use "from ... until ..." with an exclusive end.
+- Conflicting filters, unsupported qualifiers and relative dates
+  request clarification without executing tools.
+
+Verification:
+- Added 21 scope tests and 16 scoped-planner tests.
+- Updated earlier tests whose head/date requests are now supported.
+- Full regression: 384 passed in 1.04s.
+- End-to-end fixtures verify exclusion of other heads, machines,
+  dates and statuses, including exact time boundaries.
+- Unknown heads return empty results rather than broader statistics.
+- Existing analytics calculations remain unchanged.
+
+Limits:
+- Scoped routing is verified on controlled data.
+- The earlier real-data verification covered successful closures
+  across the supplied file, without head or time restrictions.
+- Live LLM routing, multi-head natural-language routing, relative dates
+  and the remaining analytics tools are still pending.
+
+Next action:
+Verify a scoped head query against the saved real event Parquet,
+comparing its result with an explicitly filtered direct calculation.
