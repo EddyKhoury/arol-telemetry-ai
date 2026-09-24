@@ -258,6 +258,16 @@ class LLMPlanner(Planner):
             expected.rationale = "LLM scope gate requested clarification before contacting the model"
             return expected
 
+        if len(expected.calls) != 1:
+            return Plan(
+                goal="Select deterministic routing for the requested combined analyses.",
+                ambiguous=True,
+                clarification=("This combined question is supported by deterministic rules. "
+                               "Select the rules planner or ask each analysis separately; "
+                               "live LLM validation currently accepts one tool per request."),
+                rationale="combined analysis stopped before contacting the model",
+            )
+
         specs = [spec for spec in registry.get_tool_specs() if spec["name"] in VERIFIED_TOOLS]
         # Only transport failure may fall back. Invalid proposals never trigger a
         # different analysis or a second attempt with fewer filters.

@@ -321,6 +321,9 @@ def assemble(query, plan, results, pool_meta, trace, *, min_n=30) -> str:
 
     out += ["## 5. Confidence and limits", ""]
     limits: list[str] = []
+    if len(ok_results) > 1:
+        limits.append("- These analyses may reuse the same observations. Their sample sizes "
+                      "must not be added to claim a count of distinct events.")
     for name, result in ok_results:
         meta = result["meta"]
         if meta.get("notes"):
@@ -332,9 +335,8 @@ def assemble(query, plan, results, pool_meta, trace, *, min_n=30) -> str:
     for warning in pool_meta.get("warnings", []):
         limits.append(f"- {warning}")
     if not limits:
-        total = sum(r["meta"].get("n", 0) for _, r in ok_results)
         limits.append(f"- All analyses met the minimum sample size "
-                      f"(min_n={min_n}); {total:,} events examined in total.")
+                      f"(min_n={min_n}); sample sizes are reported per tool.")
     rate_tools = {
         "success_rate", "success_rate_per_head", "head_detail", "anomaly_heads"
     }

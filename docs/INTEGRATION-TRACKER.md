@@ -819,3 +819,66 @@ Next action: review the results and regression, then record the scoped-source ch
 - Full configured pool: 54,722,936 observed exact +1 events.
 - Deterministic routing was used; no live LLM request was made.
 - Next action: expand diagnostic question coverage.
+
+## Integration implementation — diagnostic aliases and combined analyses
+
+- Expanded deterministic routing for the existing diagnostic catalogue.
+  Pure grammar checks route 24 of the original 30 questions to their original
+  expected tools. Six fleet-comparison or failure-explanation questions ask
+  for clarification; those diagnostic features remain deferred.
+- Anchored analysis phrases are rewritten while retaining the complete scope
+  suffix for strict validation. Unsupported exclusions, extra clauses,
+  contradictory filters and configuration overrides remain blocked.
+- Added statistics/distribution and trend/anomalies two-tool plans. Every call
+  preserves the same requested head, machine, time and status filters. Histogram
+  bins apply only to the histogram. The partitioned source validates both calls
+  before performing one scoped load. Different scopes are rejected.
+- Plans exceeding the configured tool budget stop before loading instead of
+  silently dropping calls. Reports identify reused observations; per-tool sample
+  sizes must not be added as a distinct-event total.
+- Combined LLM plans request clarification before inference. Single-tool LLM
+  proposals retain strict type and exact-scope validation. No live model accuracy
+  or general language-understanding improvement is claimed.
+- Core analytics, exact +1 event detection and status decoding are unchanged.
+
+Verification:
+- Added 69 test cases covering the original catalogue, scope preservation,
+  rejected suffixes, both event sources, two-result delivery, mismatched source
+  scopes, tool budgets, deferred diagnostics and LLM guards.
+- Added scripts/verify_diagnostic_routing.py. After regression passes, it checks
+  actual catalogue plans and two scoped real-data combined reports against direct
+  calculations on an independent original-CSV reference. It records full field
+  and result comparisons, reports, traces and benchmark evidence.
+- Previous full regression: 634 passed in 1.88s. New runtime tests and real-data
+  verification are pending. Installer and pure grammar checks are separate from
+  Polars execution and do not establish runtime success.
+- Catalogue coverage is known-question regression, not held-out accuracy.
+
+Next action:
+Run .venv/bin/python -m pytest tests -q, then this installer with --verify-real.
+The six deferred diagnostic questions and KPI denominator semantics remain open.
+
+## Integration measurement — diagnostic routing 20260924-085303-176845
+
+- Known catalogue: 24/30 routed to original expected tools.
+- Remaining 6 questions require clarification; their diagnostic features are deferred.
+- Two real combined queries passed: statistics/distribution and trend/anomalies.
+- Each used one scoped load, preserved all eight event fields, and executed two tools.
+- Complete results matched direct calculations with 1e-12 relative/absolute float tolerance.
+- Combined LLM proposals remain blocked before inference; no new live model requests.
+- Evidence: benchmarks/integration/diagnostic_routing_20260924-085303-176845.json.
+
+Limits: this is known-question regression coverage and one real scope, not held-out accuracy or root-cause validation.
+
+Next action: record regression results, then resolve KPI denominator semantics and remaining diagnostic requirements.
+
+## Integration checkpoint — diagnostic routing verified
+
+- Full regression: 703 passed in 2.12s.
+- Known catalogue: 24/30 questions reached their expected tools.
+- Six questions require clarification; their diagnostic features remain deferred.
+- Two real combined reports passed complete-result and event-field comparisons.
+- Each report used one scoped load of 7,575 events and two tool calls.
+- Deterministic routing only; no live model requests.
+- Evidence: benchmarks/integration/diagnostic_routing_20260924-085303-176845.json
+- Next action: resolve KPI denominator semantics and remaining diagnostic requirements.

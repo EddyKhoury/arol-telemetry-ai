@@ -20,8 +20,8 @@ class ScopeTooLarge(ValueError):
 
 
 def _read_parameters(calls):
-    # Current verified routing proposes one analysis. Never silently ignore a
-    # second analysis or load only the first analysis's scope.
+    # Validate one call at a time; _read_plan checks the complete combination
+    # and rejects different scopes before opening any event data.
     if not isinstance(calls, (list, tuple)) or len(calls) != 1:
         raise ValueError("Partitioned event loading currently requires exactly one analysis")
     call = calls[0]
@@ -55,6 +55,24 @@ def _read_parameters(calls):
     return name, args, scope, status
 
 
+COMBINED_TOOLS = {
+    frozenset({"torque_stats", "torque_distribution"}),
+    frozenset({"torque_trend", "detect_torque_anomalies"}),
+}
+
+
+def _read_plan(calls):
+    if not isinstance(calls, (list, tuple)) or len(calls) not in (1, 2):
+        raise ValueError("Use exactly one analysis or one supported two-tool combination")
+    parsed = [_read_parameters([call]) for call in calls]
+    if len(parsed) == 2:
+        if frozenset(item[0] for item in parsed) not in COMBINED_TOOLS:
+            raise ValueError("Use exactly one analysis or a supported statistics/distribution or trend/anomalies pair")
+        if parsed[0][2:] != parsed[1][2:]:
+            raise ValueError("Combined analyses must use exactly the same head, machine, time and status scope")
+    return parsed
+
+
 def _stat_signature(paths):
     return [(str(path), path.stat().st_size, path.stat().st_mtime_ns) for path in paths]
 
@@ -85,7 +103,8 @@ class EventPoolSource:
         return sorted(self.paths)
 
     def load_for_plan(self, pool, calls):
-        name, args, scope, status = _read_parameters(calls)
+        parsed = _read_plan(calls)
+        name, args, scope, status = parsed[0]
         # Validate the complete filter on an empty schema before opening data.
         filter_events(pl.DataFrame(schema=PERSON_A_COLUMNS).lazy(), **scope)
         if pool not in self.paths:
@@ -129,8 +148,9 @@ class EventPoolSource:
         meta.update({
             "n_files": len(partitions), "event_manifest": str(manifest_path),
             "pool_total_events": total, "loaded_events": len(events),
-            "selection_parameters": selection, "planned_tool": name,
-            "planned_arguments": args, "max_loaded_events": self.max_events,
+            "selection_parameters": selection, "planned_tool": name if len(parsed) == 1 else None,
+            "planned_arguments": args if len(parsed) == 1 else None,
+            "planned_calls": [(item[0], item[1]) for item in parsed], "max_loaded_events": self.max_events,
             "materialization": "requested scope only", "verified_partition_hashes": self.verify_hashes,
         })
         return events, meta

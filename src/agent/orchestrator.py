@@ -76,6 +76,16 @@ class Orchestrator:
                 "trace": trace,
             }
 
+        if (type(self.max_steps) is not int or self.max_steps < 1
+                or not plan.calls or len(plan.calls) > self.max_steps):
+            message = "The complete analysis plan exceeds the configured tool-call budget or is empty. No analysis was run."
+            trace.note("stopped before loading; the plan was not truncated")
+            return {
+                "status": "needs_clarification", "query": query, "message": message,
+                "markdown": f"# Clarification needed\n\n{message}\n",
+                "results": [], "plan": plan, "trace": trace,
+            }
+
         try:
             if callable(getattr(self.source, "load_for_plan", None)):
                 events, meta = self.source.load_for_plan(pool, plan.calls)
@@ -111,7 +121,7 @@ class Orchestrator:
             }
 
         results = []
-        for tool_name, params in plan.calls[:self.max_steps]:
+        for tool_name, params in plan.calls:
             result = dispatch_tool(
                 tool_name, events, config=self.cfg, arguments=params
             )

@@ -8,7 +8,7 @@ import re
 from datetime import datetime, timedelta
 
 
-def parse_torque_request(query):
+def _parse_canonical_torque_request(query):
     """Return None for other domains, or a plan dictionary for torque queries."""
     text = " ".join((query or "").split()).rstrip(".?!")
     if not re.search(r"\btorque\b", text, re.I):
@@ -26,7 +26,8 @@ def parse_torque_request(query):
                 "Statistics, distribution, trend and anomalies also accept "
                 "'for successful closures' or 'for status 0'. Distribution "
                 "accepts 'with 10 bins'. Head comparison accepts machine and "
-                "time scope only. Relative dates, exclusions, combined analyses "
+                "time scope only. Supported combinations are statistics with distribution, "
+                "or trend with anomalies. Relative dates, exclusions, other combinations "
                 "and changes to configured thresholds/windows need clarification."
             ),
             rationale="unsupported or conflicting torque request; no tool called",
@@ -127,3 +128,28 @@ def parse_torque_request(query):
         calls=[(tool, params)], filters=dict(params),
         rationale="parsed complete torque request with explicit scope",
     )
+
+
+def parse_torque_request(query):
+    """Recognise diagnostic phrases, then validate the entire remaining scope."""
+    from .diagnostic_routing import rewrite_diagnostic_question
+    text = " ".join((query or "").split()).rstrip(".?!")
+    rewritten = rewrite_diagnostic_question(text)
+    if rewritten is None:
+        return _parse_canonical_torque_request(query)
+    if rewritten.get("ambiguous"):
+        return rewritten
+    plan = _parse_canonical_torque_request(rewritten["canonical"])
+    if plan is None or plan.get("ambiguous"):
+        return plan
+    parameters = plan["calls"][0][1]
+    calls = []
+    for tool in rewritten["tools"]:
+        args = dict(parameters)
+        if tool != "torque_distribution":
+            args.pop("bins", None)  # Bin count belongs to the histogram only.
+        calls.append((tool, args))
+    plan["calls"] = calls
+    plan["goal"] = "Run " + " and ".join(rewritten["tools"]) + " within the explicitly requested event scope."
+    plan["rationale"] = "matched complete diagnostic phrase and validated every scope clause"
+    return plan
