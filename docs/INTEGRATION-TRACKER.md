@@ -882,3 +882,15 @@ Next action: record regression results, then resolve KPI denominator semantics a
 - Deterministic routing only; no live model requests.
 - Evidence: benchmarks/integration/diagnostic_routing_20260924-085303-176845.json
 - Next action: resolve KPI denominator semantics and remaining diagnostic requirements.
+
+## Integration measurement — KPI denominators 20260924-085749-215016
+
+- Observed events counted: 54,722,936.
+- Existing A denominator: 31,430,144.
+- Existing B denominator: 31,430,108.
+- Unknown cap-presence events: 36.
+- Reject-flagged events outside the cap-present denominator: 24.
+- This measures current formulas; no denominator policy was adopted or changed.
+- These counts describe supplied exact +1 observations; production completeness remains unknown.
+- Evidence: benchmarks/integration/kpi_denominators_20260924-085749-215016.json.
+- Next action: use the measured status coverage to define explicitly labelled KPI rates and integrate their tools.
