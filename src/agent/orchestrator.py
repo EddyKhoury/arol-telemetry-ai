@@ -10,7 +10,7 @@ from ..common import config as config_mod
 from ..common import datasource, registry
 from ..common.event_pool_source import ScopeTooLarge
 from ..common.runtime import dispatch_tool
-from ..analytics import registered_torque, registered_analytics, registered_kpi  # noqa: F401
+from ..analytics import registered_torque, registered_analytics, registered_kpi, registered_head_kpi  # noqa: F401
 from . import report as report_mod
 from .planner import get_planner
 from .trace import Trace
@@ -104,7 +104,9 @@ class Orchestrator:
             trace.step("load_pool", pool=pool, n_events=int(len(events)),
                        source=self.source.name,
                        pool_total_events=meta.get("pool_total_events"),
-                       selection_parameters=meta.get("selection_parameters"))
+                       selection_parameters=meta.get("selection_parameters"),
+                       comparison_focus_head=meta.get("comparison_focus_head"),
+                       comparison_population=meta.get("comparison_population"))
         except ScopeTooLarge as exc:
             message = str(exc)
             trace.step("load_pool", pool=pool, ok=False, error=message)

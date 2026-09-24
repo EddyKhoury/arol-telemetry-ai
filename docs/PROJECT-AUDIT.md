@@ -7008,3 +7008,90 @@ are not declared complete by this batch.
 - Evidence: benchmarks/integration/explicit_kpi_20260924-091145-276511.json
 - Next action: integrate descriptive head ranking and diagnostic comparisons,
   preserving explicit denominators and avoiding unsupported causal claims.
+
+## Integration implementation — descriptive head success comparisons
+
+- Added rank_heads_by_success and compare_head_success. Both require an explicit
+  single machine and start/end time window. The metric is confirmed cap-present
+  success fraction; previously implemented denominator/count semantics remain.
+- Eligible heads have at least trusted analytics.min_n cap-present observations.
+  Small-sample and zero-denominator heads remain visible but are not ranked.
+  Fewer than two eligible heads means comparative ranks are unavailable.
+- Sorting uses exact integer ratios, not rounded percentages. Equal fractions
+  share competition ranks (for example 1, 1, 3). Head IDs provide stable display
+  order within ties without breaking the tied rank.
+- Focus comparisons use the unweighted median of eligible OTHER observed heads
+  within the same selected machine/time population. The focus is excluded from
+  its baseline and at least two eligible peers are required. Missing/undersized
+  focus heads or too few peers return explicit unavailable results, not a
+  substituted head, invented baseline or zero difference.
+- Head rankings and percentage-point differences are descriptive. Sample-size
+  eligibility does not establish statistical significance, comparable operating
+  conditions, production completeness or a fault cause.
+- Explicit grammar supports 'rank heads by cap-present success rate' and
+  'compare head 5 with peers by cap-present success rate', followed by machine
+  and date/range scope. Missing scope, selected peer subsets, status prefilters,
+  threshold overrides and unsupported trailing clauses request clarification.
+- In compare_head_success ONLY, head_id names the focus and does not remove
+  requested peer rows. The source retains all available heads in the explicit
+  machine/time window, records actual population and focus separately in its
+  metadata and trace, and explains this distinction in the report. Its existing
+  row limit applies to the full requested comparison population; no peer subset
+  is silently selected to fit the limit.
+- Existing single-head KPI filtering, torque routes, exact +1 event detection,
+  status decoding and core analytics are unchanged. LLM routing remains limited
+  to its five verified single-tool torque analyses.
+- The six original general diagnostic questions remain deferred; these explicit
+  metric/scope routes are not recorded as completing unspecified fault questions.
+
+Verification:
+- Added 44 runtime test cases for exact ties, rounded-float edge cases, peer
+  exclusion/median, absent or small samples, invalid counts, multiple machines,
+  strict grammar, both event sources, explicit population tracing, row limits
+  without peer removal, and blocking LLM inference.
+- Pure-Python arithmetic/oracle/grammar and guarded-installer checks passed.
+  Runtime Polars/pytest and real telemetry execution are pending on the Mac.
+- Previous full regression: 749 passed in 2.34s.
+- scripts/verify_head_kpi.py compares two real orchestration queries with an
+  independent original-CSV count reference, cross-product ranking oracle and
+  peer-median calculation. It verifies original event fields and requested
+  population, and saves reports, traces and benchmark evidence.
+
+Next action:
+Run .venv/bin/python -m pytest tests -q, then this installer with --verify-real.
+Temporal KPI requirements, broader evaluation and presentation interface work
+remain pending; no new live LLM accuracy result is claimed.
+
+## Integration repair — restore the supported two-tool KPI plan
+
+- The head-comparison installer accidentally expanded COMBINED_TOOLS' KPI pair
+  to a four-tool set while adding the new standalone tools to SUPPORTED_TOOLS.
+- The existing regression caught the issue: 1 failed, 792 passed in 2.34s.
+- Restored exactly success_rate + success_rate_per_head as a supported pair.
+  rank_heads_by_success and compare_head_success remain supported standalone.
+- Updated the local installer payload to match the repaired source so its
+  --verify-real integrity check remains usable. No tests were weakened.
+- Pure plan-validation checks cover all three valid pairs, the standalone head
+  tools, invalid combinations and differing-scope rejection. Full runtime
+  regression and the real-data verifier must be rerun.
+
+## Integration measurement — descriptive head comparisons 20260924-092755-624939
+
+- Two real queries matched independent per-head counts, exact-ratio competition ranks and the focus-versus-peer calculation.
+- Original event fields and explicit machine/time population were preserved. Reports and traces were saved.
+- Focus was excluded from the unweighted peer median. Small-sample exclusions and tied ranks remain visible.
+- Deterministic descriptive results only; no significance, root-cause or new LLM routing claim.
+- Evidence: benchmarks/integration/head_kpi_20260924-092755-624939.json.
+- Next action: record regression results and continue with remaining temporal KPI requirements.
+
+## Integration checkpoint — descriptive head comparisons verified
+
+- Full regression after the KPI-pair repair: 793 passed in 2.34s.
+- Both real queries preserved event fields and matched independent counts,
+  competition ranks and peer-comparison calculations.
+- Population: 473,993 observed events; 36 heads, all sample-size eligible.
+- H05 minus the eligible-other-head median: 0.0 percentage points.
+- Descriptive results for one twelve-hour window; no fault-cause,
+  statistical-significance or live LLM routing claim.
+- Evidence: benchmarks/integration/head_kpi_20260924-092755-624939.json
+- Next action: integrate temporal KPI requirements.

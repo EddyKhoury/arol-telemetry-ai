@@ -235,7 +235,46 @@ def _finding_head_correlation(result, meta):
     return lines
 
 
+def _finding_head_ranking(result, meta):
+    lines = [
+        f"- Metric: confirmed cap-present success fraction; eligible heads need at least {result['min_cap_present_n']} cap-present observations.",
+        f"- {result['n_eligible_heads']} of {result['n_head_groups']} observed heads are eligible. Lowest fractions appear first; exact ties share competition ranks.",
+        "- This is descriptive ordering, not a statistical anomaly test or a fault diagnosis.",
+    ]
+    if not result['ranking_available']:
+        lines.append('- Fewer than two heads are eligible; comparative ranks are unavailable.')
+    for row in result['ranked_heads']:
+        rank = row['rank_lowest_success_first']
+        label = f"rank {rank}" if rank is not None else 'unranked'
+        lines.append(f"- **{row['head_id']}**: {label}; {_pct(row['success_rate_cap_present'], 6)} "
+                     f"({row['n_success_cap_present']:,}/{row['n_cap_present']:,} confirmed cap-present); "
+                     f"unknown cap presence {row['n_cap_unknown']:,}."
+                     + (' Below the minimum sample size.' if not row['eligible_for_ranking'] else ''))
+    return lines
+
+
+def _finding_head_success_comparison(result, meta):
+    lines = [f"- Focus head: **{result['focus_head_id']}**. Peers are other available heads in the same selected machine/time window."]
+    if result['comparison_available']:
+        focus = result['focus']
+        lines += [
+            f"- Focus cap-present success: {_pct(focus['success_rate_cap_present'], 6)} ({focus['n_success_cap_present']:,}/{focus['n_cap_present']:,}).",
+            f"- Unweighted median across {result['n_eligible_peers']} eligible OTHER heads: {_pct(result['peer_median_success_rate'], 6)}.",
+            f"- Focus minus peer median: {result['difference_from_peer_median_pp']:+.6f} percentage points.",
+        ]
+    else:
+        reasons = {
+            'focus_head_not_found': 'The requested head has no observations in this scope; no other head was substituted.',
+            'focus_below_minimum_sample': 'The focus head has too few confirmed cap-present observations for this comparison.',
+            'fewer_than_two_eligible_peers': 'At least two other eligible heads are required for the peer baseline.',
+        }
+        lines.append('- Comparison unavailable: ' + reasons[result['comparison_reason']])
+    return lines + _finding_head_ranking(result, meta)
+
+
 FINDING_TEMPLATES = {
+    "rank_heads_by_success": _finding_head_ranking,
+    "compare_head_success": _finding_head_success_comparison,
     "torque_distribution": _finding_torque_distribution,
     "torque_trend": _finding_torque_trend,
     "detect_torque_anomalies": _finding_torque_anomalies,
@@ -291,6 +330,9 @@ def assemble(query, plan, results, pool_meta, trace, *, min_n=30) -> str:
     if plan.filters:
         out.append(f"- Filters requested: "
                    f"{', '.join(f'`{k}={v}`' for k, v in plan.filters.items())}.")
+
+    if any(name == 'compare_head_success' for name, _ in plan.calls):
+        out.append('- For this peer comparison, head_id identifies the focus. Input data intentionally include other available heads in the requested machine/time window.')
 
     out += ["", "## 3. Analyses executed", ""]
     for name, result in results:
@@ -370,7 +412,7 @@ def _next_checks(ok_results, failed) -> list[str]:
                     "- Review counter discontinuities separately; this "
                     "report describes observed exact +1 events."
                 )
-        if name in {"success_rate", "success_rate_per_head"}:
+        if name in {"success_rate", "success_rate_per_head", "rank_heads_by_success", "compare_head_success"}:
             checks.append("- Review unknown status/cap-presence counts, sample sizes and observation coverage before comparing rates. These summaries do not establish machine stability or a fault cause.")
         if name == "anomaly_heads" and r.get("flagged_heads"):
             head = r["flagged_heads"][0]["head_id"]

@@ -20,7 +20,7 @@ import re
 from dataclasses import dataclass, field
 
 from ..common import registry, timeutils
-from ..analytics import registered_torque, registered_analytics, registered_kpi  # noqa: F401
+from ..analytics import registered_torque, registered_analytics, registered_kpi, registered_head_kpi  # noqa: F401
 
 
 @dataclass
@@ -125,6 +125,11 @@ class RulePlanner(Planner):
         torque_plan = _plan_torque_stats(query)
         if torque_plan is not None:
             return torque_plan
+
+        from .head_kpi_routing import parse_head_kpi_request
+        head_plan = parse_head_kpi_request(query)
+        if head_plan is not None:
+            return Plan(**head_plan)
 
         from .kpi_routing import parse_kpi_request
         kpi_plan = parse_kpi_request(query)

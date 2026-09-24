@@ -13,7 +13,8 @@ from ..ingestion.event_pool import scan_event_pool
 
 SUPPORTED_TOOLS = frozenset({"torque_stats", "torque_distribution", "torque_trend",
                              "detect_torque_anomalies", "head_correlation",
-                             "success_rate", "success_rate_per_head"})
+                             "success_rate", "success_rate_per_head",
+                             "rank_heads_by_success", "compare_head_success"})
 
 
 class ScopeTooLarge(ValueError):
@@ -53,6 +54,13 @@ def _read_parameters(calls):
         if args["head_a"] == args["head_b"]:
             raise ValueError("Head comparison requires distinct heads")
         scope["head_id"] = [args["head_a"], args["head_b"]]
+    if name in {'rank_heads_by_success', 'compare_head_success'}:
+        from ..analytics.registered_head_kpi import validate_population
+        validate_population(args['machine_id'], args['start'], args['end'], args.get('head_id'))
+        if name == 'compare_head_success':
+            # This tool explicitly requests peer data; head_id denotes its
+            # focus, while machine/time bound the shared comparison population.
+            scope.pop('head_id')
     return name, args, scope, status
 
 
@@ -129,7 +137,7 @@ class EventPoolSource:
         if n_selected > self.max_events:
             raise ScopeTooLarge(
                 f"Requested scope contains {n_selected:,} observed events; the configured "
-                f"limit is {self.max_events:,}. Specify a narrower head, machine or time scope."
+                f"limit is {self.max_events:,}. Specify a narrower time window or another supported scope."
             )
         # The extra limit also bounds the collected result if underlying files
         # change between the count and the read. Such changes are rejected below.
@@ -155,4 +163,7 @@ class EventPoolSource:
             "planned_calls": [(item[0], item[1]) for item in parsed], "max_loaded_events": self.max_events,
             "materialization": "requested scope only", "verified_partition_hashes": self.verify_hashes,
         })
+        if name in {'rank_heads_by_success', 'compare_head_success'}:
+            meta['comparison_population'] = dict(scope)
+            meta['comparison_focus_head'] = args.get('head_id')
         return events, meta
