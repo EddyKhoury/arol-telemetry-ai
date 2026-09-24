@@ -753,3 +753,69 @@ Next action: inspect audit comparison results, then connect manifest-backed, sco
 - Cross-file closures retained: 667.
 - Counter-audit agreement: True.
 - Agent integration with the partitioned pool remains pending.
+
+## Integration implementation — scoped manifest event source
+
+- Added src/common/event_pool_source.py: EventPoolSource consumes a completed
+  event-pool manifest. It validates canonical tool arguments and applies the
+  requested time/head/machine/status scope before collecting event rows.
+- Head comparison reads both requested heads with all statuses, preserving
+  Person A's existing summary denominator and pairing guards.
+- data.source=person_a_pool selects this source. data.person_a maps pool names
+  to manifest.json paths, resolved relative to the repository root. The prior
+  person_a single-Parquet source retains its existing behavior.
+- Orchestrator uses load_for_plan when provided. Read failures never trigger a
+  whole-pool retry. Oversized selections ask for narrower scope without dispatch.
+- data.max_loaded_events defaults to 1,000,000. It must be a positive integer.
+  The size check returns a scalar before event-row collection; a second limit
+  bounds the final collected result. No claim of measured peak memory is made.
+- Data-used report and trace distinguish scoped loaded events from the full
+  pool count declared in the manifest. They retain requested filters.
+- data.verify_pool_hashes optionally rehashes all event partitions; default is
+  false to avoid reading all bytes for each scoped question. Every partition's
+  schema/path is checked, and manifest/file-stat changes during reads are rejected.
+- No partition is skipped using manifest date summaries; Parquet predicate
+  pushdown controls physical reads. There is no whole-pool DataFrame cache.
+- Current source supports exactly one verified torque analysis per plan.
+  Combined analyses, additional KPI tools and broader question grammar remain pending.
+- Core calculations, exact +1 detection, status decoding, registry declarations
+  and LLM scope validation are unchanged.
+
+Verification:
+- Added 37 tests for all-five-tool parity, scoped materialization, field
+  preservation, empty results, correlation scope, repeated queries, invalid
+  arguments, size limits, missing/changed files, trace/report delivery and no
+  fallback to whole-pool loading.
+- Added scripts/verify_scoped_event_pool.py: three deterministic real-data
+  queries compared with an independent two-CSV continuous reference. It saves
+  field/result parity evidence, reports and traces, and updates both documents.
+- Previous full regression: 597 passed in 1.41s; new execution tests pending.
+- Source compiles and installer safeguards checked; no new real-data run or
+  live LLM result is claimed by installation.
+
+Next action:
+Run .venv/bin/python -m pytest tests -q. Once green, run the installer with
+--verify-real to verify the known scoped torque query, first file boundary,
+and two-head comparison through the partitioned production source.
+
+## Integration measurement — scoped event-pool orchestration 20260924-083523-257131
+
+- Three deterministic real-data queries passed.
+- Scoped statistics, file-boundary statistics, and head comparison matched an independently filtered two-CSV reference.
+- All eight original event fields were compared; each request executed one tool.
+- Agent source collected only the requested scope from the configured full event pool.
+- No live model request or measured peak-memory claim.
+- Evidence: benchmarks/integration/scoped_event_pool_20260924-083523-257131.json.
+
+Next action: review the results and regression, then record the scoped-source checkpoint.
+
+## Integration checkpoint — scoped event-pool orchestration verified
+
+- Full regression: 634 passed in 1.88s.
+- Three real-data queries passed field and complete-result comparisons.
+- Loaded events: 7,575; 72; and 26,334 respectively.
+- Boundary query retained 14 cross-file events.
+- Head comparison used 12,178 matched finite torque pairs.
+- Full configured pool: 54,722,936 observed exact +1 events.
+- Deterministic routing was used; no live LLM request was made.
+- Next action: expand diagnostic question coverage.

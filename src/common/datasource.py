@@ -75,9 +75,12 @@ class PersonASource:
 
 def get_source(cfg):
     kind = cfg.get("data", {}).get("source")
+    if kind == "person_a_pool":
+        from .event_pool_source import EventPoolSource
+        return EventPoolSource(cfg, repo_root=REPO_ROOT)
     if kind != "person_a":
         raise ValueError(
-            "This integration currently requires data.source='person_a' "
-            "and a data.person_a mapping of pool names to event Parquet files."
+            "This integration requires data.source='person_a' or 'person_a_pool' "
+            "and a data.person_a mapping to event Parquet files or pool manifests."
         )
     return PersonASource(cfg)

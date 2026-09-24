@@ -285,6 +285,11 @@ def assemble(query, plan, results, pool_meta, trace, *, min_n=30) -> str:
         f"{pool_meta.get('timezone') or 'timezone unconfirmed'}).",
         f"- Machines: {', '.join(pool_meta.get('machines', [])) or 'n/a'}.",
     ]
+    if pool_meta.get("pool_total_events") is not None:
+        out.append(
+            f"- Events loaded for the requested scope: {pool_meta['loaded_events']:,} "
+            f"of {pool_meta['pool_total_events']:,} stored observed events in this pool."
+        )
     if pool_meta.get("rows_read") is not None:
         out.append(f"- Cleaning: {pool_meta.get('rows_read', 0):,} rows read, "
                    f"{pool_meta.get('rows_after_cleaning', 0):,} retained, "

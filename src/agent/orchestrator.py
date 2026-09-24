@@ -8,6 +8,7 @@ from pathlib import Path
 
 from ..common import config as config_mod
 from ..common import datasource
+from ..common.event_pool_source import ScopeTooLarge
 from ..common.runtime import dispatch_tool
 from ..analytics import registered_torque, registered_analytics  # noqa: F401
 from . import report as report_mod
@@ -76,10 +77,24 @@ class Orchestrator:
             }
 
         try:
-            events = self.source.load_pool(pool)
-            meta = self.source.pool_meta(pool)
+            if callable(getattr(self.source, "load_for_plan", None)):
+                events, meta = self.source.load_for_plan(pool, plan.calls)
+            else:
+                events = self.source.load_pool(pool)
+                meta = self.source.pool_meta(pool)
             trace.step("load_pool", pool=pool, n_events=int(len(events)),
-                       source=self.source.name)
+                       source=self.source.name,
+                       pool_total_events=meta.get("pool_total_events"),
+                       selection_parameters=meta.get("selection_parameters"))
+        except ScopeTooLarge as exc:
+            message = str(exc)
+            trace.step("load_pool", pool=pool, ok=False, error=message)
+            trace.note("stopped for narrower scope before event materialization or dispatch")
+            return {
+                "status": "needs_clarification", "query": query,
+                "message": message, "markdown": f"# Clarification needed\n\n{message}\n",
+                "results": [], "plan": plan, "trace": trace,
+            }
         except Exception as exc:
             message = f"{type(exc).__name__}: {exc}"
             trace.step("load_pool", pool=pool, ok=False, error=message)
