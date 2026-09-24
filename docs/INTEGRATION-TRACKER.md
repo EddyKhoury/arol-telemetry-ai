@@ -681,3 +681,75 @@ Limits:
 - Statistics do not establish engineering compliance, machine health, or root cause.
 
 Next action: review remaining multi-file, diagnostic-routing and delivery gaps before final integration.
+
+## Integration implementation — continuous partitioned event building
+
+Implemented a fresh, ordered single-machine CSV-to-event pool builder.
+- src/ingestion/event_pool.py: build_event_pool converts and processes one raw
+  file at a time; keeps the preceding final observation as the next baseline;
+  calls Person A's existing exact +1 event builder and status decoder; persists
+  one raw Parquet and one eight-column event Parquet per input file.
+- scan_event_pool validates a completed manifest and returns a lazy ordered
+  event view. Callers can filter before collecting. Optional hash verification
+  detects changed event partitions.
+- scripts/build_event_pool.py: reproducible real-data runner with source/input
+  hashes, independent exact +1 counts, optional comparison against the existing
+  full counter audit, evidence output, and audit/tracker updates.
+- Added 27 test cases for continuous-reference parity, boundary attributes,
+  empty/one-row partitions, duplicate timestamps, gaps, discontinuities,
+  decoding, invalid counters/statuses, input ordering, changed heads, machine
+  filenames, failed publication, scoped lazy reads, and manifest integrity.
+
+Decisions and limitations:
+- No input sorting, deduplication, interpolation, or discontinuity reconstruction.
+- Whole-number floats are validated for finiteness and exact representability
+  before integer conversion. Unsafe integer ranges are rejected explicitly.
+- Null/fractional counters and statuses, reversed timestamps and changed head
+  schemas stop publication. Equal timestamps and gaps remain in the input.
+- Empty files retain the preceding observation. Only the first observation of
+  the supplied pool is the baseline. The core event/analytics functions are unchanged.
+- A completed manifest is published only after all partitions pass checks;
+  existing output directories are never overwritten. Failures leave clearly
+  marked partial output without a completed manifest.
+- This batch builds a fresh pool; incremental cache reuse/resume is not implemented.
+- The builder keeps one raw file plus processing workspace; no measured peak
+  memory or speed claim is made. The reader remains lazy until collected.
+- PersonASource and the orchestrator are not changed in this batch; they still
+  require the next step for manifest-backed, scope-filtered loading.
+
+Verification status:
+- Previous user-run full regression: 570 passed in 1.42s.
+- New Python files compile; installer preflight/idempotence checked separately.
+- Polars/pytest execution of this batch is pending in the user's environment.
+- No new real-data build or live LLM request has been claimed by this install.
+
+Next action:
+Run .venv/bin/python -m pytest tests -q. If green, run the downloaded installer
+with --build-real to build all audited CSVs and compare totals, including the
+previously measured 667 cross-file exact +1 events. Then connect the manifest
+and scoped lazy loading to the production orchestrator.
+
+## Integration measurement — continuous event pool 20260924-080513-930170
+
+- Source commit: 50146f69d5b13ccb896165547fe50a60eeca0415; working-tree state recorded in evidence.
+- Files: 89; raw rows: 7623968; heads: 36.
+- Observed exact +1 events: 54722936.
+- Cross-file exact +1 events retained: 667.
+- Agreement with prior full counter audit: True.
+- Evidence: benchmarks/integration/continuous_event_pool_20260924-080513-930170.json.
+- Pool: data/event_pools/continuous-20260924-080513-930170/manifest.json.
+
+The first observation is the pool baseline. Later partitions carry the preceding observation. Empty files preserve it. Discontinuities are measured, not reconstructed. No source event or decoding function was changed. Timestamps remain as stored.
+
+Limits: this is a data-build verification, not agent execution or a measured memory benchmark. The current PersonASource still reads a single event file eagerly.
+
+Next action: inspect audit comparison results, then connect manifest-backed, scope-filtered event loading to the orchestrator.
+
+## Integration checkpoint — continuous event pool verified
+
+- Full regression: 597 passed in 1.41s.
+- All 89 files built successfully.
+- Observed exact +1 events: 54,722,936.
+- Cross-file closures retained: 667.
+- Counter-audit agreement: True.
+- Agent integration with the partitioned pool remains pending.
