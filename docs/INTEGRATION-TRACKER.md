@@ -894,3 +894,84 @@ Next action: record regression results, then resolve KPI denominator semantics a
 - These counts describe supplied exact +1 observations; production completeness remains unknown.
 - Evidence: benchmarks/integration/kpi_denominators_20260924-085749-215016.json.
 - Next action: use the measured status coverage to define explicitly labelled KPI rates and integrate their tools.
+
+## Integration implementation — explicit-denominator KPI tools
+
+- Added registered success_rate and success_rate_per_head tools for observed
+  exact +1 events. Scope accepts head, machine and half-open naive time bounds.
+  All statuses and all torque values in the requested scope are retained.
+- Cap-present success fraction = status 0 AND cap_present=True / cap_present=True.
+- Cap-present rejection fraction = reject_signal=True AND cap_present=True /
+  cap_present=True. Rejection flags outside that population are counted separately.
+- Reports include observed totals, confirmed cap presence/absence, unknown cap
+  presence, unknown rejection flags, No Load class counts and explicitly labelled
+  status-0/No-Load fractions of all observed events. No Load class and confirmed
+  cap absence remain distinct (for example status 3).
+- Reports separately reproduce A's legacy success fraction excluding No Load
+  classes. Existing A analytics and decoding are unchanged. This implementation
+  makes definitions explicit; it does not claim the old joint contract was signed.
+- Empty denominators produce null rates, never zero or 100% by substitution.
+  Inconsistent status-0 events without confirmed cap presence fail visibly.
+- Per-head results group by BOTH machine and head; report all selected groups
+  sorted by identifiers. Small cap-present samples are labelled using trusted
+  analytics.min_n. No ranking, statistical significance or fault-cause claim.
+- Deterministic success-rate, rejection-rate, No-Load-rate and capping-KPI
+  questions preserve their full scope. Status prefilters, bucket overrides,
+  relative dates and unsupported clauses request clarification.
+- The partitioned source supports the two-tool KPI plan with the same scope and
+  one bounded load. The current loaded-event limit still applies. Full-pool
+  aggregate-only orchestration has not been introduced.
+- Any plan containing an unregistered tool stops before loading and dispatch,
+  rather than returning a partial answer. The existing LLM gate still supports
+  only its five verified single torque tools; no KPI model acceptance is added.
+- KPI metadata n is the cap-present denominator; data_window covers all selected
+  observations, and result.n_observed records that distinct population.
+- Reports use six decimal places for percentages so measured differences are
+  visible and explain that repeated tool samples are not additive.
+
+Measured motivation (previous audit, not a new run):
+- 54,722,936 observed events; A denominator 31,430,144; cap-present denominator
+  31,430,108; 36 cap-unknown events; 24 rejection flags outside cap-present rows.
+- Reference: benchmarks/integration/kpi_denominators_20260924-085749-215016.json.
+
+Verification:
+- Added 46 test cases for denominators, unknown/no-load statuses, non-finite
+  torque preservation, empty scopes, invalid schemas, inconsistent inputs,
+  grouping across machines, small samples, scope grammar, dispatch rejection,
+  both event sources, report delivery and no partial execution/LLM inference.
+- Pure-Python arithmetic/report/grammar and installer checks were run separately.
+  Polars runtime tests and real-data verification remain pending on the Mac.
+- Previous regression: 703 passed in 2.12s.
+- Added scripts/verify_explicit_kpi.py: compares new rate arithmetic with the saved
+  full-pool grouped audit, then verifies two real scoped questions and per-head
+  results against independent Python counts from the original CSV. It records
+  scope/field/count/rate comparisons, reports and traces. Saved-count arithmetic
+  is explicitly distinguished from running the full pool through the agent.
+
+Next action:
+Run .venv/bin/python -m pytest tests -q, then this installer with --verify-real.
+Time buckets, fleet anomaly ranking, failure explanations, idle/throughput tools
+and live LLM KPI routing remain unintegrated; the six deferred catalogue questions
+are not declared complete by this batch.
+
+## Integration measurement — explicit KPI rates 20260924-091145-276511
+
+- Saved full-pool grouped counts verified the new denominator arithmetic, including rejects outside the cap-present population.
+- Two real scoped questions matched independent Python counts and rates, including per-machine/head groups.
+- Event fields and requested scope were preserved; reports and traces were saved.
+- Deterministic routing only. This does not establish full-pool agent execution, head ranking or fault causes.
+- Evidence: benchmarks/integration/explicit_kpi_20260924-091145-276511.json.
+- Next action: record the regression result and review remaining diagnostic requirements.
+
+## Integration checkpoint — explicit KPI reports verified
+
+- Full regression: 749 passed in 2.34s.
+- H05 query: 13,167 observed events; 7,575 cap-present.
+- Per-head query: 473,993 observed events; 272,416 cap-present; 36 groups.
+- Both queries preserved event fields and matched independent counts and rates.
+- Full-pool rate arithmetic was checked against saved grouped counts;
+  real orchestration was verified on one twelve-hour window.
+- Deterministic routing only; no live LLM KPI requests.
+- Evidence: benchmarks/integration/explicit_kpi_20260924-091145-276511.json
+- Next action: integrate descriptive head ranking and diagnostic comparisons,
+  preserving explicit denominators and avoiding unsupported causal claims.

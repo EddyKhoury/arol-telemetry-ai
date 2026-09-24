@@ -27,43 +27,35 @@ def _pct(value, digits=2):
 
 # --- per-tool finding templates -------------------------------------------
 
-def _finding_success_rate(result, meta) -> list[str]:
-    o = result["overall"]
-    lines = [
-        f"- Across {o['n_cycles']:,} cycles, {o['n_cap_present']:,} had a cap "
-        f"present. Success rate **{_pct(o['success_rate'])}** on cap-present "
-        f"closures ({o['n_success']:,} of {o['n_cap_present']:,}).",
-        f"- No Load accounted for {o['n_no_load']:,} cycles "
-        f"({_pct(o['no_load_rate'])} of all cycles) - the head cycled with no "
-        f"cap present. Counting those as failures would report "
-        f"{_pct(o['success_rate_all_cycles'])} instead.",
+def _kpi_row_lines(o):
+    return [
+        f"- Observed exact +1 events: **{o['n_observed']:,}**; confirmed cap-present: **{o['n_cap_present']:,}**; unknown cap presence: **{o['n_cap_unknown']:,}**.",
+        f"- Cap-present success: **{_pct(o['success_rate_cap_present'], 6)}** ({o['n_success_cap_present']:,}/{o['n_cap_present']:,}).",
+        f"- Cap-present rejection flags: **{_pct(o['reject_rate_cap_present'], 6)}** ({o['n_reject_cap_present']:,}/{o['n_cap_present']:,}).",
+        f"- Rejection flags outside the cap-present population: **{o['n_reject_outside_cap_present']:,}**; unknown rejection flags: {o['n_reject_unknown']:,}.",
+        f"- No Load class: {o['n_no_load_class']:,}/{o['n_observed']:,} observed events ({_pct(o['no_load_fraction_all_observed'], 6)}). Explicit cap absence: {o['n_cap_absent']:,} events.",
+        f"- Status-0 fraction of all observed events: {_pct(o['success_fraction_all_observed'], 6)} ({o['n_success_all']:,}/{o['n_observed']:,}).",
+        f"- Legacy A non-No-Load success fraction: {_pct(o['legacy_a_success_rate_non_no_load'], 6)} ({o['n_legacy_a_success']:,}/{o['n_legacy_a_non_no_load']:,}); this uses a different denominator.",
     ]
-    if o["n_reject"]:
-        lines.append(f"- {o['n_reject']:,} Bad Closures "
-                     f"({_pct(o['reject_rate'])} of cap-present closures).")
-    buckets = result.get("by_bucket") or []
-    if buckets:
-        worst = min(buckets, key=lambda b: b["success_rate"]
-                    if b["success_rate"] is not None else 2)
-        lines.append(f"- Worst {worst['bucket']} bucket: {worst['bucket_start']} "
-                     f"at {_pct(worst['success_rate'])} over "
-                     f"{worst['n_cap_present']:,} cap-present closures.")
+
+
+def _finding_success_rate(result, meta):
+    lines = _kpi_row_lines(result['overall'])
+    if result['overall']['n_observed'] == 0:
+        lines.append('- No observed events matched; rates with empty denominators are undefined (n/a).')
     return lines
 
 
-def _finding_success_rate_per_head(result, meta) -> list[str]:
-    rows = result["per_head"]
-    lines = [f"- Ranked {result['n_heads']} heads by success rate, worst first."]
-    for row in rows[:3]:
-        lines.append(f"  - **{row['head_id']}**: {_pct(row['success_rate'])} "
-                     f"({row['n_success']:,}/{row['n_cap_present']:,} cap-present), "
-                     f"{row['n_reject']:,} rejects, "
-                     f"No Load {_pct(row['no_load_rate'])}.")
-    if len(rows) > 1 and rows[0]["success_rate"] is not None \
-            and rows[1]["success_rate"] is not None:
-        gap = (rows[1]["success_rate"] - rows[0]["success_rate"]) * 100
-        lines.append(f"- The worst head trails the next worst by "
-                     f"{gap:.2f} percentage points.")
+def _finding_success_rate_per_head(result, meta):
+    rows = result['per_head']
+    lines = [f"- {result['n_head_groups']} machine/head groups; sorted by identifiers, without ranking."]
+    for row in rows:
+        lines.append(f"- **{row['machine_id']} / {row['head_id']}**:")
+        lines.extend(_kpi_row_lines(row))
+        if row['below_min_cap_present_n']:
+            lines.append(f"- This group has {row['n_cap_present']:,} cap-present observations, below min_n={row['min_cap_present_n']}.")
+    if not rows:
+        lines.append('- No observed events matched; no machine/head groups are available.')
     return lines
 
 
@@ -342,8 +334,7 @@ def assemble(query, plan, results, pool_meta, trace, *, min_n=30) -> str:
     }
     if any(name in rate_tools for name, _ in ok_results):
         limits.append(
-            "- Rates are computed over cap-present closures unless a "
-            "figure is explicitly labelled all-cycles."
+            "- Every rate identifies its denominator. Unknown cap presence is not treated as confirmed cap absence or presence."
         )
     out += limits
 
@@ -379,6 +370,8 @@ def _next_checks(ok_results, failed) -> list[str]:
                     "- Review counter discontinuities separately; this "
                     "report describes observed exact +1 events."
                 )
+        if name in {"success_rate", "success_rate_per_head"}:
+            checks.append("- Review unknown status/cap-presence counts, sample sizes and observation coverage before comparing rates. These summaries do not establish machine stability or a fault cause.")
         if name == "anomaly_heads" and r.get("flagged_heads"):
             head = r["flagged_heads"][0]["head_id"]
             checks.append(f"- Run a torque distribution and drift check on "

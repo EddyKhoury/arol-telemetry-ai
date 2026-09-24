@@ -7,10 +7,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..common import config as config_mod
-from ..common import datasource
+from ..common import datasource, registry
 from ..common.event_pool_source import ScopeTooLarge
 from ..common.runtime import dispatch_tool
-from ..analytics import registered_torque, registered_analytics  # noqa: F401
+from ..analytics import registered_torque, registered_analytics, registered_kpi  # noqa: F401
 from . import report as report_mod
 from .planner import get_planner
 from .trace import Trace
@@ -84,6 +84,15 @@ class Orchestrator:
                 "status": "needs_clarification", "query": query, "message": message,
                 "markdown": f"# Clarification needed\n\n{message}\n",
                 "results": [], "plan": plan, "trace": trace,
+            }
+
+        unavailable = [name for name, _ in plan.calls if registry.get(name) is None]
+        if unavailable:
+            message = "Requested analyses are not integrated: " + ", ".join(unavailable) + ". No partial report was produced."
+            trace.note("stopped before loading; unavailable tools in complete plan")
+            return {
+                "status": "needs_clarification", "query": query, "message": message,
+                "markdown": message, "results": [], "plan": plan, "trace": trace,
             }
 
         try:

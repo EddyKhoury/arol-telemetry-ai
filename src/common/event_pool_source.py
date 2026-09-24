@@ -12,7 +12,8 @@ from ..ingestion.adapter import PERSON_A_COLUMNS, adapt, describe
 from ..ingestion.event_pool import scan_event_pool
 
 SUPPORTED_TOOLS = frozenset({"torque_stats", "torque_distribution", "torque_trend",
-                             "detect_torque_anomalies", "head_correlation"})
+                             "detect_torque_anomalies", "head_correlation",
+                             "success_rate", "success_rate_per_head"})
 
 
 class ScopeTooLarge(ValueError):
@@ -29,7 +30,7 @@ def _read_parameters(calls):
         raise ValueError("Invalid planned tool call")
     name, arguments = call
     if not isinstance(name, str) or name not in SUPPORTED_TOOLS:
-        raise ValueError("This event source supports the five verified torque tools only")
+        raise ValueError("This event source supports the verified torque and explicit-denominator KPI tools only")
     spec = registry.get(name)
     if spec is None:
         raise ValueError(f"Tool is not registered: {name}")
@@ -56,6 +57,7 @@ def _read_parameters(calls):
 
 
 COMBINED_TOOLS = {
+    frozenset({"success_rate", "success_rate_per_head"}),
     frozenset({"torque_stats", "torque_distribution"}),
     frozenset({"torque_trend", "detect_torque_anomalies"}),
 }
@@ -67,7 +69,7 @@ def _read_plan(calls):
     parsed = [_read_parameters([call]) for call in calls]
     if len(parsed) == 2:
         if frozenset(item[0] for item in parsed) not in COMBINED_TOOLS:
-            raise ValueError("Use exactly one analysis or a supported statistics/distribution or trend/anomalies pair")
+            raise ValueError("Use exactly one analysis or a supported statistics/distribution, trend/anomalies or KPI pair")
         if parsed[0][2:] != parsed[1][2:]:
             raise ValueError("Combined analyses must use exactly the same head, machine, time and status scope")
     return parsed
