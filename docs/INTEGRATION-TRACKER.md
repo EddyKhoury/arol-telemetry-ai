@@ -1160,3 +1160,55 @@ additional held-out evaluation separately.
 - Rules planner; one tool call; no live model requests.
 - Evidence: benchmarks/integration/demo_cli_20260925-083037-682363.json.
 - Remaining diagnostic causes require explicit definitions; evaluate held-out queries and prepare the clean checkout before presenting.
+
+## Integration implementation — fixed new questions and controlled planted signals
+
+- Added a fixed, versioned 28-question catalogue under
+  benchmarks/evaluation/prompts_v1.json: 16 supported requests with exact
+  expected tool names/arguments and 12 requests that should clarify. Each
+  required scope is written in full. Original diagnostic questions are not
+  re-labelled as newly answered.
+- scripts/evaluate_agent.py builds a two-file, four-head synthetic telemetry
+  pool with 48 observed exact +1 events and four cross-file events. H05 has
+  four status-65 records and two values beyond configured torque limits;
+  others have status-0 records. A separate scalar CSV oracle checks event
+  attributes and file-boundary carry before the agent runs.
+- Each supported request runs the production planner, scoped data source,
+  registered tool, deterministic report and trace. Predeclared planted checks
+  verify the two torque flags, H05 descriptive cap-present ranking, peer
+  median difference and full-duration observed throughput. The 12 negative
+  requests must clarify without opening event data or executing tool calls.
+  Legacy unregistered keyword plans count as safe only when the whole plan is
+  rejected before load. Case outcomes, including failures, are all recorded.
+- Every case has a separate saved report, trace and detailed result in an
+  ignored data/integration_smoke/agent-evaluation-* directory. Aggregated
+  results go to benchmarks/integration/ and both audit documents. No source
+  status decoder, counter rule, tool calculations or production routing changed.
+- docs/EVALUATION.md specifies the fixture, run procedure, scores and limits.
+  The phrasings were authored with knowledge of supported grammar; success
+  on them is a controlled integration result, not broad language accuracy.
+  A planted signal is not evidence of a physical fault cause. No live model
+  or operating-time inference is evaluated here.
+
+Verification:
+- Added six production-path test cases for independent event fields, boundary
+  carry, planted anomaly/rank/peer outcomes and a causal question blocked
+  before data loading; catalogue shape is checked.
+- Pure-Python checks of 28 grammar expectations, scalar field/count truth and
+  guarded-installer transactions pass locally. Mac Polars/pytest and the full
+  production-path run remain pending.
+- Previous full regression: 846 passed in 2.86s. Earlier real-data evidence
+  covers scoped KPI, torque and CLI calculations separately.
+
+Next action:
+Run .venv/bin/python -m pytest tests -q and the installer with --evaluate.
+Then inspect failures (if any), a report and its trace before clean-checkout
+review and presentation preparation.
+
+## Integration measurement — fixed new questions and planted signals 20260925-084539-470253
+
+- Fixed new question catalogue: 28/28 cases passed; 16/16 supported plans and 12/12 clarification cases passed.
+- Planted counter events matched an independent scalar field oracle, including four cross-file events.
+- H05 had four status-65 records and two planted torque limit breaches; describe these as signals, not causes.
+- Evidence: benchmarks/integration/agent_evaluation_20260925-084539-470253.json. No live LLM requests.
+- Remaining: clean checkout, presentation review, and any explicitly defined causal/operating-time inputs.
