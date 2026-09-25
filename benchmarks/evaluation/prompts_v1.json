@@ -1,0 +1,362 @@
+{
+  "version": 1,
+  "scope": "fixed new question phrasings with a controlled 4-head event pool",
+  "selection": "Authored with knowledge of supported grammar; not an unbiased language sample",
+  "cases": [
+    {
+      "id": "new_stats",
+      "question": "Show torque stats for head 5 for machine M1 from 2026-02-01T00:00:00 until 2026-02-01T00:00:13",
+      "expected": "routed",
+      "calls": [
+        {
+          "name": "torque_stats",
+          "arguments": {
+            "machine_id": "M1",
+            "start": "2026-02-01T00:00:00",
+            "end": "2026-02-01T00:00:13",
+            "head_id": "H05"
+          }
+        }
+      ]
+    },
+    {
+      "id": "new_status",
+      "question": "What are the torque statistics for head 6 for machine M1 from 2026-02-01T00:00:00 until 2026-02-01T00:00:13 for successful closures",
+      "expected": "routed",
+      "calls": [
+        {
+          "name": "torque_stats",
+          "arguments": {
+            "machine_id": "M1",
+            "start": "2026-02-01T00:00:00",
+            "end": "2026-02-01T00:00:13",
+            "head_id": "H06",
+            "status_filter": "successful"
+          }
+        }
+      ]
+    },
+    {
+      "id": "new_histogram",
+      "question": "Give me the torque histogram data for head 5 for machine M1 from 2026-02-01T00:00:00 until 2026-02-01T00:00:13",
+      "expected": "routed",
+      "calls": [
+        {
+          "name": "torque_distribution",
+          "arguments": {
+            "machine_id": "M1",
+            "start": "2026-02-01T00:00:00",
+            "end": "2026-02-01T00:00:13",
+            "head_id": "H05"
+          }
+        }
+      ]
+    },
+    {
+      "id": "new_trend",
+      "question": "Is the average torque moving upward or downward for head 5 for machine M1 from 2026-02-01T00:00:00 until 2026-02-01T00:00:13",
+      "expected": "routed",
+      "calls": [
+        {
+          "name": "torque_trend",
+          "arguments": {
+            "machine_id": "M1",
+            "start": "2026-02-01T00:00:00",
+            "end": "2026-02-01T00:00:13",
+            "head_id": "H05"
+          }
+        }
+      ]
+    },
+    {
+      "id": "planted_torque_thresholds",
+      "question": "Which torque values look suspicious for head 5 for machine M1 from 2026-02-01T00:00:00 until 2026-02-01T00:00:13",
+      "expected": "routed",
+      "calls": [
+        {
+          "name": "detect_torque_anomalies",
+          "arguments": {
+            "machine_id": "M1",
+            "start": "2026-02-01T00:00:00",
+            "end": "2026-02-01T00:00:13",
+            "head_id": "H05"
+          }
+        }
+      ]
+    },
+    {
+      "id": "new_pair",
+      "question": "Compare H05 and H06 for machine M1 from 2026-02-01T00:00:00 until 2026-02-01T00:00:13",
+      "expected": "routed",
+      "calls": [
+        {
+          "name": "head_correlation",
+          "arguments": {
+            "machine_id": "M1",
+            "start": "2026-02-01T00:00:00",
+            "end": "2026-02-01T00:00:13",
+            "head_a": "H05",
+            "head_b": "H06"
+          }
+        }
+      ]
+    },
+    {
+      "id": "new_summary_histogram",
+      "question": "Show torque statistics and distribution for head 5 for machine M1 from 2026-02-01T00:00:00 until 2026-02-01T00:00:13",
+      "expected": "routed",
+      "calls": [
+        {
+          "name": "torque_stats",
+          "arguments": {
+            "machine_id": "M1",
+            "start": "2026-02-01T00:00:00",
+            "end": "2026-02-01T00:00:13",
+            "head_id": "H05"
+          }
+        },
+        {
+          "name": "torque_distribution",
+          "arguments": {
+            "machine_id": "M1",
+            "start": "2026-02-01T00:00:00",
+            "end": "2026-02-01T00:00:13",
+            "head_id": "H05"
+          }
+        }
+      ]
+    },
+    {
+      "id": "new_trend_anomalies",
+      "question": "Check both torque trend and abnormal events for head 5 for machine M1 from 2026-02-01T00:00:00 until 2026-02-01T00:00:13",
+      "expected": "routed",
+      "calls": [
+        {
+          "name": "torque_trend",
+          "arguments": {
+            "machine_id": "M1",
+            "start": "2026-02-01T00:00:00",
+            "end": "2026-02-01T00:00:13",
+            "head_id": "H05"
+          }
+        },
+        {
+          "name": "detect_torque_anomalies",
+          "arguments": {
+            "machine_id": "M1",
+            "start": "2026-02-01T00:00:00",
+            "end": "2026-02-01T00:00:13",
+            "head_id": "H05"
+          }
+        }
+      ]
+    },
+    {
+      "id": "new_rejection_rate",
+      "question": "What is the rejection rate for head 5 for machine M1 from 2026-02-01T00:00:00 until 2026-02-01T00:00:13",
+      "expected": "routed",
+      "calls": [
+        {
+          "name": "success_rate",
+          "arguments": {
+            "machine_id": "M1",
+            "start": "2026-02-01T00:00:00",
+            "end": "2026-02-01T00:00:13",
+            "head_id": "H05"
+          }
+        },
+        {
+          "name": "success_rate_per_head",
+          "arguments": {
+            "machine_id": "M1",
+            "start": "2026-02-01T00:00:00",
+            "end": "2026-02-01T00:00:13",
+            "head_id": "H05"
+          }
+        }
+      ]
+    },
+    {
+      "id": "new_per_head",
+      "question": "Show success rate per head for machine M1 from 2026-02-01T00:00:00 until 2026-02-01T00:00:13",
+      "expected": "routed",
+      "calls": [
+        {
+          "name": "success_rate_per_head",
+          "arguments": {
+            "machine_id": "M1",
+            "start": "2026-02-01T00:00:00",
+            "end": "2026-02-01T00:00:13"
+          }
+        }
+      ]
+    },
+    {
+      "id": "planted_rank",
+      "question": "Rank heads by cap present success rate for machine M1 from 2026-02-01T00:00:00 until 2026-02-01T00:00:13",
+      "expected": "routed",
+      "calls": [
+        {
+          "name": "rank_heads_by_success",
+          "arguments": {
+            "machine_id": "M1",
+            "start": "2026-02-01T00:00:00",
+            "end": "2026-02-01T00:00:13"
+          }
+        }
+      ]
+    },
+    {
+      "id": "planted_peers",
+      "question": "Compare head 5 with peers by cap present success rate for machine M1 from 2026-02-01T00:00:00 until 2026-02-01T00:00:13",
+      "expected": "routed",
+      "calls": [
+        {
+          "name": "compare_head_success",
+          "arguments": {
+            "machine_id": "M1",
+            "start": "2026-02-01T00:00:00",
+            "end": "2026-02-01T00:00:13",
+            "head_id": "H05"
+          }
+        }
+      ]
+    },
+    {
+      "id": "new_daily",
+      "question": "Daily success rate for machine M1 from 2026-02-01T00:00:00 until 2026-02-01T00:00:13",
+      "expected": "routed",
+      "calls": [
+        {
+          "name": "kpi_over_time",
+          "arguments": {
+            "machine_id": "M1",
+            "start": "2026-02-01T00:00:00",
+            "end": "2026-02-01T00:00:13",
+            "bucket": "day"
+          }
+        }
+      ]
+    },
+    {
+      "id": "new_observed_hourly",
+      "question": "Show observed throughput by hour for machine M1 from 2026-02-01T00:00:00 until 2026-02-01T00:00:13",
+      "expected": "routed",
+      "calls": [
+        {
+          "name": "observed_throughput",
+          "arguments": {
+            "machine_id": "M1",
+            "start": "2026-02-01T00:00:00",
+            "end": "2026-02-01T00:00:13",
+            "bucket": "hour"
+          }
+        }
+      ]
+    },
+    {
+      "id": "new_calendar_date",
+      "question": "Average torque on 2026-02-01 for machine M1 for head 5",
+      "expected": "routed",
+      "calls": [
+        {
+          "name": "torque_stats",
+          "arguments": {
+            "start": "2026-02-01T00:00:00",
+            "end": "2026-02-02T00:00:00",
+            "machine_id": "M1",
+            "head_id": "H05"
+          }
+        }
+      ]
+    },
+    {
+      "id": "new_diagnostic_alias",
+      "question": "What is the average, minimum and maximum torque for head 5 for machine M1 from 2026-02-01T00:00:00 until 2026-02-01T00:00:13",
+      "expected": "routed",
+      "calls": [
+        {
+          "name": "torque_stats",
+          "arguments": {
+            "machine_id": "M1",
+            "start": "2026-02-01T00:00:00",
+            "end": "2026-02-01T00:00:13",
+            "head_id": "H05"
+          }
+        }
+      ]
+    },
+    {
+      "id": "unspecified_outlier",
+      "question": "Which head behaves differently?",
+      "expected": "needs_clarification",
+      "calls": []
+    },
+    {
+      "id": "causal",
+      "question": "Why is H05 failing more?",
+      "expected": "needs_clarification",
+      "calls": []
+    },
+    {
+      "id": "relative_date",
+      "question": "Average torque yesterday for head 5",
+      "expected": "needs_clarification",
+      "calls": []
+    },
+    {
+      "id": "shift_calendar",
+      "question": "Observed throughput by shift for machine M1 from 2026-02-01T00:00:00 until 2026-02-01T00:00:13",
+      "expected": "needs_clarification",
+      "calls": []
+    },
+    {
+      "id": "status_prefilter",
+      "question": "Success rate by hour for machine M1 from 2026-02-01T00:00:00 until 2026-02-01T00:00:13 for successful closures",
+      "expected": "needs_clarification",
+      "calls": []
+    },
+    {
+      "id": "silent_exclusion",
+      "question": "Rank heads by cap present success rate for machine M1 from 2026-02-01T00:00:00 until 2026-02-01T00:00:13 excluding H06",
+      "expected": "needs_clarification",
+      "calls": []
+    },
+    {
+      "id": "missing_baseline",
+      "question": "Compare head 5 with peers by cap present success rate",
+      "expected": "needs_clarification",
+      "calls": []
+    },
+    {
+      "id": "double_status",
+      "question": "Average torque for head 5 for machine M1 from 2026-02-01T00:00:00 until 2026-02-01T00:00:13 for status 0 for successful closures",
+      "expected": "needs_clarification",
+      "calls": []
+    },
+    {
+      "id": "zero_bins",
+      "question": "Show torque distribution with 0 bins for head 5 for machine M1 from 2026-02-01T00:00:00 until 2026-02-01T00:00:13",
+      "expected": "needs_clarification",
+      "calls": []
+    },
+    {
+      "id": "same_pair",
+      "question": "Compare H05 and H05 for machine M1 from 2026-02-01T00:00:00 until 2026-02-01T00:00:13",
+      "expected": "needs_clarification",
+      "calls": []
+    },
+    {
+      "id": "window_override",
+      "question": "Observed throughput by day for machine M1 from 2026-02-01T00:00:00 until 2026-02-01T00:00:13 with window 5 seconds",
+      "expected": "needs_clarification",
+      "calls": []
+    },
+    {
+      "id": "relative_kpi",
+      "question": "Success rate per head for machine M1 yesterday",
+      "expected": "needs_clarification",
+      "calls": []
+    }
+  ]
+}

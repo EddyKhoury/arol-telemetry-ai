@@ -1,0 +1,36 @@
+{
+  "git_commit_before_run": "bdfc87e66c30670599c6dded4b3d609cb3fd492e",
+  "git_status_before_run": "M docs/INTEGRATION-TRACKER.md\n M docs/PROJECT-AUDIT.md\n?? docs/DEMO.md\n?? scripts/demo_agent.py\n?? scripts/verify_demo_agent.py\n?? tests/test_demo_agent.py",
+  "manifest": "data/event_pools/continuous-20260924-080513-930170/manifest.json",
+  "manifest_sha256": "d319c82e5407e08cbc98e08f91a38a13637c49adb05404900657ae33481e76d6",
+  "query": "Average torque for head 5 for machine MCC777eda3db57348ef8a3113a642ae74db from 2026-02-01T00:00:00 until 2026-02-01T12:00:00 for successful closures",
+  "source_code_sha256": {
+    "scripts/demo_agent.py": "374a3e5a89b1a8354408b18a65151f66a636e36557569cc551ff8d9e759c17a0",
+    "scripts/verify_demo_agent.py": "aa8bba980f109acbbd42445266c6232f06d7dd3fdcd6cf4ac7a6003557d5712a",
+    "src/agent/orchestrator.py": "7c88ead61a062287ca39038a4b5bed26af73e411a3c7723473838ca6f0ef35e7",
+    "src/common/event_pool_source.py": "910f6d63da80e460ff8026eb73740833dfdc05d7cc9568f010b0b22bbd3d1aac"
+  },
+  "reference": "benchmarks/integration/torque_stats_scoped_real_2026-02-01.json",
+  "reference_sha256": "c25508b5ea926e9494aea030c8f027a8a762b949461352d3d76fea2fcc2e929b",
+  "planner": "rules",
+  "status": "ok",
+  "tool_calls": 1,
+  "statistics": {
+    "mean": 1.9957486468646868,
+    "min": 0.0,
+    "max": 2.173,
+    "std": 0.039834022264437635,
+    "sample_size": 7575
+  },
+  "matches_prior_independent_reference": true,
+  "artifacts": {
+    "report": "data/integration_smoke/demo-cli/session-20260925-083037-685689-965b039b/question-001/reports/report-20260925-103037.md",
+    "trace": "data/integration_smoke/demo-cli/session-20260925-083037-685689-965b039b/question-001/traces/trace-20260925-103037.json"
+  },
+  "limits": [
+    "This is CLI/report/trace smoke verification against a previously independently checked query.",
+    "It does not rerun the full independent CSV oracle or evaluate held-out language.",
+    "The deterministic planner was used; no live model inference ran.",
+    "Only observed exact +1 events; no counter discontinuity reconstruction or downtime inference."
+  ]
+}

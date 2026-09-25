@@ -20,3 +20,5 @@ venv/
 # Data
 data/*
 !data/sample.csv
+# Local development installers
+/dev-installers/

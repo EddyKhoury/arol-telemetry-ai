@@ -1,0 +1,497 @@
+{
+  "git_commit_before_run": "88d25028aee4f4a883f4fd8e82a62bd35509edb7",
+  "git_status_before_run": "M docs/INTEGRATION-TRACKER.md\n M docs/PROJECT-AUDIT.md\n?? benchmarks/evaluation/\n?? docs/EVALUATION.md\n?? scripts/evaluate_agent.py\n?? tests/test_agent_evaluation.py",
+  "version": 1,
+  "catalogue_sha256": "25c2fb9cbf45740ef58ad05c12d25558183af568bd3265f1c200dee73b801532",
+  "script_sha256": "c991a9d09d49cb62e089ccba798a56b15fbd8e65df5614cd098bfd4066ce2dbe",
+  "manifest_sha256": "2004c98b02dc4e25b0ab0b710449e663e32ac4358a17cf2a721ad496701d3648",
+  "synthetic_csv_sha256": [
+    "900bd1e918eb2940a8f6bbcec6195ae2933807c199c389445ded1bd1544d8eeb",
+    "7198fab68a05a734aed7efa018b1b8a12a9e64542254a80f7452edcfb293d55d"
+  ],
+  "independent_scalar_field_parity": true,
+  "expected_observed_events": 48,
+  "expected_cross_file_events": 4,
+  "planted_truth": {
+    "H05_cap_present": 12,
+    "H05_success": 8,
+    "peer_cap_present": 12,
+    "peer_success": 12,
+    "H05_threshold_torque": {
+      "second_6": 3.1,
+      "second_7": 0.5
+    }
+  },
+  "requested": 28,
+  "passed": 28,
+  "supported_routing_exact": 16,
+  "supported_routing_total": 16,
+  "clarifications_without_load": 12,
+  "clarification_total": 12,
+  "cases": [
+    {
+      "id": "new_stats",
+      "expected": "routed",
+      "status": "ok",
+      "exact_plan": true,
+      "tool_calls": 1,
+      "unavailable_legacy_planned_tools": [],
+      "data_load_attempted_for_clarification": false,
+      "passed": true,
+      "artifacts": {
+        "report": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_stats/reports/report-20260925-104539.md",
+        "trace": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_stats/traces/trace-20260925-104539.json",
+        "snapshot": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_stats/result.json"
+      },
+      "result_sha256": "21c7746f8be1e6f5927253143a2ad85361eef33088c8da04b77c8a8d3054afb9"
+    },
+    {
+      "id": "new_status",
+      "expected": "routed",
+      "status": "ok",
+      "exact_plan": true,
+      "tool_calls": 1,
+      "unavailable_legacy_planned_tools": [],
+      "data_load_attempted_for_clarification": false,
+      "passed": true,
+      "artifacts": {
+        "report": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_status/reports/report-20260925-104539.md",
+        "trace": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_status/traces/trace-20260925-104539.json",
+        "snapshot": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_status/result.json"
+      },
+      "result_sha256": "4dda2f07ddb1606818d2eaecf6a39a3f552d24fc82c520421ca77f254416b06c"
+    },
+    {
+      "id": "new_histogram",
+      "expected": "routed",
+      "status": "ok",
+      "exact_plan": true,
+      "tool_calls": 1,
+      "unavailable_legacy_planned_tools": [],
+      "data_load_attempted_for_clarification": false,
+      "passed": true,
+      "artifacts": {
+        "report": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_histogram/reports/report-20260925-104539.md",
+        "trace": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_histogram/traces/trace-20260925-104539.json",
+        "snapshot": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_histogram/result.json"
+      },
+      "result_sha256": "a3f975287871271d4b98cc714854654e02d212529ec17c28b5d84f579bc00f60"
+    },
+    {
+      "id": "new_trend",
+      "expected": "routed",
+      "status": "ok",
+      "exact_plan": true,
+      "tool_calls": 1,
+      "unavailable_legacy_planned_tools": [],
+      "data_load_attempted_for_clarification": false,
+      "passed": true,
+      "artifacts": {
+        "report": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_trend/reports/report-20260925-104539.md",
+        "trace": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_trend/traces/trace-20260925-104539.json",
+        "snapshot": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_trend/result.json"
+      },
+      "result_sha256": "f3a02f92b52f18b9772f94248620c7bf0ce842bf4d601a9b492d6d1efb76c47e"
+    },
+    {
+      "id": "planted_torque_thresholds",
+      "expected": "routed",
+      "status": "ok",
+      "exact_plan": true,
+      "tool_calls": 1,
+      "unavailable_legacy_planned_tools": [],
+      "data_load_attempted_for_clarification": false,
+      "passed": true,
+      "artifacts": {
+        "report": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/planted_torque_thresholds/reports/report-20260925-104539.md",
+        "trace": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/planted_torque_thresholds/traces/trace-20260925-104539.json",
+        "snapshot": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/planted_torque_thresholds/result.json"
+      },
+      "result_sha256": "18cc78061329e8dc3c19be995e02a9e531fd3c4225ec21434f5975323c9de148"
+    },
+    {
+      "id": "new_pair",
+      "expected": "routed",
+      "status": "ok",
+      "exact_plan": true,
+      "tool_calls": 1,
+      "unavailable_legacy_planned_tools": [],
+      "data_load_attempted_for_clarification": false,
+      "passed": true,
+      "artifacts": {
+        "report": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_pair/reports/report-20260925-104539.md",
+        "trace": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_pair/traces/trace-20260925-104539.json",
+        "snapshot": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_pair/result.json"
+      },
+      "result_sha256": "35b69201fbaa6faadc27d44b72bab941106c5079ea05a2dde3c3cf9d9dd0188f"
+    },
+    {
+      "id": "new_summary_histogram",
+      "expected": "routed",
+      "status": "ok",
+      "exact_plan": true,
+      "tool_calls": 2,
+      "unavailable_legacy_planned_tools": [],
+      "data_load_attempted_for_clarification": false,
+      "passed": true,
+      "artifacts": {
+        "report": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_summary_histogram/reports/report-20260925-104539.md",
+        "trace": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_summary_histogram/traces/trace-20260925-104539.json",
+        "snapshot": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_summary_histogram/result.json"
+      },
+      "result_sha256": "043b957bdb65fc1bf3e46fbe0c8af9c05378b7ca29188a1aa61e217fe6341b01"
+    },
+    {
+      "id": "new_trend_anomalies",
+      "expected": "routed",
+      "status": "ok",
+      "exact_plan": true,
+      "tool_calls": 2,
+      "unavailable_legacy_planned_tools": [],
+      "data_load_attempted_for_clarification": false,
+      "passed": true,
+      "artifacts": {
+        "report": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_trend_anomalies/reports/report-20260925-104539.md",
+        "trace": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_trend_anomalies/traces/trace-20260925-104539.json",
+        "snapshot": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_trend_anomalies/result.json"
+      },
+      "result_sha256": "6fbec9615e9f0b1e42ed92e8d18868d7309e19ac3cbbcdb593bc38a5a7af469c"
+    },
+    {
+      "id": "new_rejection_rate",
+      "expected": "routed",
+      "status": "ok",
+      "exact_plan": true,
+      "tool_calls": 2,
+      "unavailable_legacy_planned_tools": [],
+      "data_load_attempted_for_clarification": false,
+      "passed": true,
+      "artifacts": {
+        "report": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_rejection_rate/reports/report-20260925-104539.md",
+        "trace": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_rejection_rate/traces/trace-20260925-104539.json",
+        "snapshot": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_rejection_rate/result.json"
+      },
+      "result_sha256": "032ac92a416b976f72f5cb9ec189e552088de983f17ef837c4ebf6f33277fc9b"
+    },
+    {
+      "id": "new_per_head",
+      "expected": "routed",
+      "status": "ok",
+      "exact_plan": true,
+      "tool_calls": 1,
+      "unavailable_legacy_planned_tools": [],
+      "data_load_attempted_for_clarification": false,
+      "passed": true,
+      "artifacts": {
+        "report": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_per_head/reports/report-20260925-104539.md",
+        "trace": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_per_head/traces/trace-20260925-104539.json",
+        "snapshot": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_per_head/result.json"
+      },
+      "result_sha256": "d372a533e87909ea43afccd246d9099a2f468ada9445cf75a1ef9ed876689afb"
+    },
+    {
+      "id": "planted_rank",
+      "expected": "routed",
+      "status": "ok",
+      "exact_plan": true,
+      "tool_calls": 1,
+      "unavailable_legacy_planned_tools": [],
+      "data_load_attempted_for_clarification": false,
+      "passed": true,
+      "artifacts": {
+        "report": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/planted_rank/reports/report-20260925-104539.md",
+        "trace": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/planted_rank/traces/trace-20260925-104539.json",
+        "snapshot": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/planted_rank/result.json"
+      },
+      "result_sha256": "811f9ba22076b28f2f47141eec6dd275a44f789279893949bd4dc5bd047afa8c"
+    },
+    {
+      "id": "planted_peers",
+      "expected": "routed",
+      "status": "ok",
+      "exact_plan": true,
+      "tool_calls": 1,
+      "unavailable_legacy_planned_tools": [],
+      "data_load_attempted_for_clarification": false,
+      "passed": true,
+      "artifacts": {
+        "report": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/planted_peers/reports/report-20260925-104539.md",
+        "trace": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/planted_peers/traces/trace-20260925-104539.json",
+        "snapshot": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/planted_peers/result.json"
+      },
+      "result_sha256": "97f109ab1edb9db02c3d0657d48be9fcf92ae8ca387c0f46bc9555570b973396"
+    },
+    {
+      "id": "new_daily",
+      "expected": "routed",
+      "status": "ok",
+      "exact_plan": true,
+      "tool_calls": 1,
+      "unavailable_legacy_planned_tools": [],
+      "data_load_attempted_for_clarification": false,
+      "passed": true,
+      "artifacts": {
+        "report": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_daily/reports/report-20260925-104539.md",
+        "trace": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_daily/traces/trace-20260925-104539.json",
+        "snapshot": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_daily/result.json"
+      },
+      "result_sha256": "8aba5750d5f2e520107d1558b4021e101d4e9fd360c4af2454a278d7584ba2f1"
+    },
+    {
+      "id": "new_observed_hourly",
+      "expected": "routed",
+      "status": "ok",
+      "exact_plan": true,
+      "tool_calls": 1,
+      "unavailable_legacy_planned_tools": [],
+      "data_load_attempted_for_clarification": false,
+      "passed": true,
+      "artifacts": {
+        "report": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_observed_hourly/reports/report-20260925-104539.md",
+        "trace": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_observed_hourly/traces/trace-20260925-104539.json",
+        "snapshot": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_observed_hourly/result.json"
+      },
+      "result_sha256": "da0ed9e4c9a916766ec15a42f22449dfe31df8f5b52f8ef70f9d7238555837d4"
+    },
+    {
+      "id": "new_calendar_date",
+      "expected": "routed",
+      "status": "ok",
+      "exact_plan": true,
+      "tool_calls": 1,
+      "unavailable_legacy_planned_tools": [],
+      "data_load_attempted_for_clarification": false,
+      "passed": true,
+      "artifacts": {
+        "report": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_calendar_date/reports/report-20260925-104539.md",
+        "trace": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_calendar_date/traces/trace-20260925-104539.json",
+        "snapshot": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_calendar_date/result.json"
+      },
+      "result_sha256": "7b75d553d53e5fcb9cf30e6bd7dc17820dd49539e4822e643118f7be76ee4954"
+    },
+    {
+      "id": "new_diagnostic_alias",
+      "expected": "routed",
+      "status": "ok",
+      "exact_plan": true,
+      "tool_calls": 1,
+      "unavailable_legacy_planned_tools": [],
+      "data_load_attempted_for_clarification": false,
+      "passed": true,
+      "artifacts": {
+        "report": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_diagnostic_alias/reports/report-20260925-104539.md",
+        "trace": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_diagnostic_alias/traces/trace-20260925-104539.json",
+        "snapshot": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/new_diagnostic_alias/result.json"
+      },
+      "result_sha256": "c43e315faa0e7faf1bb5d11c93f0aaf321b16e868e8fcdd68937dd0d3e7f28b7"
+    },
+    {
+      "id": "unspecified_outlier",
+      "expected": "needs_clarification",
+      "status": "needs_clarification",
+      "exact_plan": true,
+      "tool_calls": 0,
+      "unavailable_legacy_planned_tools": [],
+      "data_load_attempted_for_clarification": false,
+      "passed": true,
+      "artifacts": {
+        "report": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/unspecified_outlier/reports/report-20260925-104539.md",
+        "trace": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/unspecified_outlier/traces/trace-20260925-104539.json",
+        "snapshot": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/unspecified_outlier/result.json"
+      },
+      "result_sha256": "af2cd8efa936decb9b845be6548e5ddccddb3a192f445692c27a0bf2c478b4e3"
+    },
+    {
+      "id": "causal",
+      "expected": "needs_clarification",
+      "status": "needs_clarification",
+      "exact_plan": true,
+      "tool_calls": 0,
+      "unavailable_legacy_planned_tools": [],
+      "data_load_attempted_for_clarification": false,
+      "passed": true,
+      "artifacts": {
+        "report": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/causal/reports/report-20260925-104539.md",
+        "trace": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/causal/traces/trace-20260925-104539.json",
+        "snapshot": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/causal/result.json"
+      },
+      "result_sha256": "5084dc39e3e183c15dabdbcc859497eca9afb20449730e52ace98f2180ecfae1"
+    },
+    {
+      "id": "relative_date",
+      "expected": "needs_clarification",
+      "status": "needs_clarification",
+      "exact_plan": true,
+      "tool_calls": 0,
+      "unavailable_legacy_planned_tools": [],
+      "data_load_attempted_for_clarification": false,
+      "passed": true,
+      "artifacts": {
+        "report": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/relative_date/reports/report-20260925-104539.md",
+        "trace": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/relative_date/traces/trace-20260925-104539.json",
+        "snapshot": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/relative_date/result.json"
+      },
+      "result_sha256": "4d1fe80c02bbc3fbbc6b66530098c21e3312f45ac7572d4ed40632eab36cd25d"
+    },
+    {
+      "id": "shift_calendar",
+      "expected": "needs_clarification",
+      "status": "needs_clarification",
+      "exact_plan": false,
+      "tool_calls": 0,
+      "unavailable_legacy_planned_tools": [
+        "throughput"
+      ],
+      "data_load_attempted_for_clarification": false,
+      "passed": true,
+      "artifacts": {
+        "report": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/shift_calendar/reports/report-20260925-104539.md",
+        "trace": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/shift_calendar/traces/trace-20260925-104539.json",
+        "snapshot": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/shift_calendar/result.json"
+      },
+      "result_sha256": "0cd7f772137e6e39b6d2407efe1c946f256e1dc40ec3f2d2023b1c551f73d869"
+    },
+    {
+      "id": "status_prefilter",
+      "expected": "needs_clarification",
+      "status": "needs_clarification",
+      "exact_plan": true,
+      "tool_calls": 0,
+      "unavailable_legacy_planned_tools": [],
+      "data_load_attempted_for_clarification": false,
+      "passed": true,
+      "artifacts": {
+        "report": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/status_prefilter/reports/report-20260925-104539.md",
+        "trace": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/status_prefilter/traces/trace-20260925-104539.json",
+        "snapshot": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/status_prefilter/result.json"
+      },
+      "result_sha256": "a3b27b1b712278a8b6b4121a338422aaa5007e1cd6e8544ac7a39d2e461c180d"
+    },
+    {
+      "id": "silent_exclusion",
+      "expected": "needs_clarification",
+      "status": "needs_clarification",
+      "exact_plan": true,
+      "tool_calls": 0,
+      "unavailable_legacy_planned_tools": [],
+      "data_load_attempted_for_clarification": false,
+      "passed": true,
+      "artifacts": {
+        "report": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/silent_exclusion/reports/report-20260925-104539.md",
+        "trace": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/silent_exclusion/traces/trace-20260925-104539.json",
+        "snapshot": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/silent_exclusion/result.json"
+      },
+      "result_sha256": "5c1d56b71cba2fd2ac88d38b3db8cc56fce52f6fd96232e9d6f7d4daf8d6bee3"
+    },
+    {
+      "id": "missing_baseline",
+      "expected": "needs_clarification",
+      "status": "needs_clarification",
+      "exact_plan": true,
+      "tool_calls": 0,
+      "unavailable_legacy_planned_tools": [],
+      "data_load_attempted_for_clarification": false,
+      "passed": true,
+      "artifacts": {
+        "report": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/missing_baseline/reports/report-20260925-104539.md",
+        "trace": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/missing_baseline/traces/trace-20260925-104539.json",
+        "snapshot": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/missing_baseline/result.json"
+      },
+      "result_sha256": "8f062d0f75c3ba09fce0ebc41e8b9901266ba37878483d046eaeaa7044b2fd62"
+    },
+    {
+      "id": "double_status",
+      "expected": "needs_clarification",
+      "status": "needs_clarification",
+      "exact_plan": true,
+      "tool_calls": 0,
+      "unavailable_legacy_planned_tools": [],
+      "data_load_attempted_for_clarification": false,
+      "passed": true,
+      "artifacts": {
+        "report": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/double_status/reports/report-20260925-104539.md",
+        "trace": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/double_status/traces/trace-20260925-104539.json",
+        "snapshot": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/double_status/result.json"
+      },
+      "result_sha256": "aa9215f9bd383cfdf731210268a240acdae64dea8e0bd7d11d30ad4b5d51038e"
+    },
+    {
+      "id": "zero_bins",
+      "expected": "needs_clarification",
+      "status": "needs_clarification",
+      "exact_plan": true,
+      "tool_calls": 0,
+      "unavailable_legacy_planned_tools": [],
+      "data_load_attempted_for_clarification": false,
+      "passed": true,
+      "artifacts": {
+        "report": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/zero_bins/reports/report-20260925-104539.md",
+        "trace": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/zero_bins/traces/trace-20260925-104539.json",
+        "snapshot": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/zero_bins/result.json"
+      },
+      "result_sha256": "9c9da6a7fda3e0b57103948d52468fae9809f3636a8eb3b02799b73db7ffda02"
+    },
+    {
+      "id": "same_pair",
+      "expected": "needs_clarification",
+      "status": "needs_clarification",
+      "exact_plan": true,
+      "tool_calls": 0,
+      "unavailable_legacy_planned_tools": [],
+      "data_load_attempted_for_clarification": false,
+      "passed": true,
+      "artifacts": {
+        "report": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/same_pair/reports/report-20260925-104539.md",
+        "trace": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/same_pair/traces/trace-20260925-104539.json",
+        "snapshot": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/same_pair/result.json"
+      },
+      "result_sha256": "b980b393e718643e736d321a83a30e869cfeab07525e7874d15748d40600d8dd"
+    },
+    {
+      "id": "window_override",
+      "expected": "needs_clarification",
+      "status": "needs_clarification",
+      "exact_plan": true,
+      "tool_calls": 0,
+      "unavailable_legacy_planned_tools": [],
+      "data_load_attempted_for_clarification": false,
+      "passed": true,
+      "artifacts": {
+        "report": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/window_override/reports/report-20260925-104539.md",
+        "trace": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/window_override/traces/trace-20260925-104539.json",
+        "snapshot": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/window_override/result.json"
+      },
+      "result_sha256": "4367559770591b5b9c8c1e846819590bc90f16b1e4c3d92b327b9074f1737589"
+    },
+    {
+      "id": "relative_kpi",
+      "expected": "needs_clarification",
+      "status": "needs_clarification",
+      "exact_plan": true,
+      "tool_calls": 0,
+      "unavailable_legacy_planned_tools": [],
+      "data_load_attempted_for_clarification": false,
+      "passed": true,
+      "artifacts": {
+        "report": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/relative_kpi/reports/report-20260925-104539.md",
+        "trace": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/relative_kpi/traces/trace-20260925-104539.json",
+        "snapshot": "data/integration_smoke/agent-evaluation-20260925-084539-470253/cases/relative_kpi/result.json"
+      },
+      "result_sha256": "f5c2c9375ee9b603499cef8fd57e7878299a0c7cfae2e26e43cddedbdc544492"
+    }
+  ],
+  "config": {
+    "min_n": 3,
+    "torque_expected_min": 1.5,
+    "torque_expected_max": 2.5,
+    "anomaly_sigma": 3.0,
+    "drift_window_seconds": 3
+  },
+  "limits": [
+    "Fixed phrasings were authored with knowledge of the supported grammar, not randomly sampled language.",
+    "Synthetic threshold violations and status-65 observations are planted signals, not evidence of a physical failure cause.",
+    "This deterministic evaluation does not make live model requests or estimate model language accuracy.",
+    "One short synthetic pool with four heads; no full-pool scalability claim."
+  ],
+  "run_dir": "data/integration_smoke/agent-evaluation-20260925-084539-470253"
+}
