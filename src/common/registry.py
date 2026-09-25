@@ -51,7 +51,7 @@ PARAM_VOCABULARY: dict[str, dict] = {
                    "description": "Machine identifier, e.g. 'MCC777'. Omit for all machines."},
     "pool": {"type": "string",
              "description": "Which data pool to analyse, e.g. 'feb'."},
-    "bucket": {"type": "string", "enum": ["hour", "shift", "day", "week"],
+    "bucket": {"type": "string", "enum": ["hour", "day"],
                "description": "Time granularity to group by."},
     "cap_present_only": {"type": "boolean",
                          "description": "Restrict to closures where a cap was actually applied."},

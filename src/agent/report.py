@@ -272,7 +272,45 @@ def _finding_head_success_comparison(result, meta):
     return lines + _finding_head_ranking(result, meta)
 
 
+def _finding_temporal(result, meta, *, throughput=False):
+    total = result['overall']
+    lines = [
+        f"- Requested window: {result['requested_window']['start']} to {result['requested_window']['end']} (end exclusive); {total['duration_seconds']:g} stored-timestamp seconds.",
+        f"- Observed exact +1 events: **{total['n_observed']:,}**; cap-present: **{total['n_cap_present']:,}**; successful: **{total['n_success_cap_present']:,}**.",
+        f"- Overall observed-event rate: **{total['observed_events_per_hour']:.6g}/hour**, using the full requested duration.",
+        f"- Unknown cap presence: {total['n_cap_unknown']:,}; rejection flags outside cap-present rows: {total['n_reject_outside_cap_present']:,}.",
+        '- Empty buckets mean no recorded events. They do not establish zero production or machine downtime; telemetry coverage is unverified.',
+        '- Buckets use timestamps as stored. Timezone, DST elapsed-time effects and operating-time utilization are not established.',
+    ]
+    rows = result['by_bucket'][:48]
+    if len(rows) < result['n_buckets']:
+        lines.append(f"- Showing the first 48 of {result['n_buckets']} intervals; use a shorter window for a complete report table.")
+    if throughput:
+        lines += ['', '| Interval [start, end) | Seconds | Observed events | Observed/hour | Cap-present/hour | Successful/hour |',
+                  '|---|---:|---:|---:|---:|---:|']
+        for r in rows:
+            lines.append(f"| {r['bucket_start']} → {r['bucket_end']} | {r['duration_seconds']:g} | {r['n_observed']:,} | {r['observed_events_per_hour']:.6g} | {r['cap_present_events_per_hour']:.6g} | {r['successful_events_per_hour']:.6g} |")
+    else:
+        lines += [f"- Cap-present rates marked 'small n' use fewer than {total['min_cap_present_n']} observations.", '',
+                  '| Interval [start, end) | Observed | Cap-present | Success / cap | Reject / cap | No Load / all | Unknown cap |',
+                  '|---|---:|---:|---:|---:|---:|---:|']
+        for r in rows:
+            small = ' (small n)' if r['below_min_cap_present_n'] else ''
+            lines.append(f"| {r['bucket_start']} → {r['bucket_end']} | {r['n_observed']:,} | {r['n_cap_present']:,}{small} | {_pct(r['success_rate_cap_present'], 6)} | {_pct(r['reject_rate_cap_present'], 6)} | {_pct(r['no_load_fraction_all_observed'], 6)} | {r['n_cap_unknown']:,} |")
+    return lines
+
+
+def _finding_kpi_over_time(result, meta):
+    return _finding_temporal(result, meta)
+
+
+def _finding_observed_throughput(result, meta):
+    return _finding_temporal(result, meta, throughput=True)
+
+
 FINDING_TEMPLATES = {
+    "kpi_over_time": _finding_kpi_over_time,
+    "observed_throughput": _finding_observed_throughput,
     "rank_heads_by_success": _finding_head_ranking,
     "compare_head_success": _finding_head_success_comparison,
     "torque_distribution": _finding_torque_distribution,
@@ -414,6 +452,8 @@ def _next_checks(ok_results, failed) -> list[str]:
                 )
         if name in {"success_rate", "success_rate_per_head", "rank_heads_by_success", "compare_head_success"}:
             checks.append("- Review unknown status/cap-presence counts, sample sizes and observation coverage before comparing rates. These summaries do not establish machine stability or a fault cause.")
+        if name in {'kpi_over_time', 'observed_throughput'}:
+            checks.append('- Check raw telemetry coverage and the operating schedule before interpreting empty intervals or changes in observed-event rates.')
         if name == "anomaly_heads" and r.get("flagged_heads"):
             head = r["flagged_heads"][0]["head_id"]
             checks.append(f"- Run a torque distribution and drift check on "

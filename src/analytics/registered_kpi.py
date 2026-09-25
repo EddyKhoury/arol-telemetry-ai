@@ -68,7 +68,7 @@ def finish_counts(counts, min_n):
     return out
 
 
-def _calculate(events, *, per_head, start=None, end=None, head_id=None, machine_id=None):
+def _prepare(events, *, start=None, end=None, head_id=None, machine_id=None):
     scoped, applied = filter_events(events, start=start, end=end, head_id=head_id, machine_id=machine_id)
     schema = scoped.collect_schema()
     required = {'ts', 'machine_id', 'head_id', 'status', 'error_class', 'cap_present', 'reject_signal'}
@@ -87,6 +87,11 @@ def _calculate(events, *, per_head, start=None, end=None, head_id=None, machine_
     min_n = current_config().get('analytics', {}).get('min_n', 30)
     if type(min_n) is not int or min_n < 1:
         raise ValueError('analytics.min_n must be a positive integer')
+    return frame, applied, min_n
+
+
+def _calculate(events, *, per_head, start=None, end=None, head_id=None, machine_id=None):
+    frame, applied, min_n = _prepare(events, start=start, end=end, head_id=head_id, machine_id=machine_id)
     overall = finish_counts(frame.select(_aggregations()).row(0, named=True), min_n)
     result = {'overall': overall, 'rate_definitions': dict(DEFINITIONS)}
     if per_head:

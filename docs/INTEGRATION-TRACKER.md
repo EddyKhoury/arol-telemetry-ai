@@ -1062,3 +1062,52 @@ remain pending; no new live LLM accuracy result is claimed.
   statistical-significance or live LLM routing claim.
 - Evidence: benchmarks/integration/head_kpi_20260924-092755-624939.json
 - Next action: integrate temporal KPI requirements.
+
+## Integration implementation — bounded hourly and daily KPI reports
+
+- Added kpi_over_time and observed_throughput tools for a single machine and
+  explicit start/end interval, optionally scoped to a head. Hourly and daily
+  calendar buckets partition the requested half-open interval. The first and
+  last buckets are clipped to its bounds, and empty buckets remain in the output.
+- Bucket counts include all observed exact +1 events regardless of status or
+  finite torque. Success and reject fractions use only the cap-present
+  denominator; no-load and unknown-cap observations remain explicit. Existing
+  overall and per-head KPI definitions and event construction are preserved.
+- Observed events per hour divide event counts by each requested bucket's full
+  duration, including partial buckets. The overall rate uses total events /
+  entire requested duration, rather than averaging per-bucket rates. An empty
+  bucket describes absent observed events; telemetry coverage, operating time,
+  downtime, production completeness and time-zone/DST handling are unconfirmed.
+- Registered schemas accept hour/day only. A trusted
+  analytics.max_time_buckets setting (default 1000) rejects excessive grids
+  before the scoped event source opens its manifest. Reports show up to 48
+  buckets and tell the user when rows are abbreviated; complete rows remain in
+  tool results. Unsupported window overrides, relative dates, unknown scope and
+  other filters request clarification. LLM routes remain limited to the five
+  previously verified single-tool torque analyses.
+
+Verification:
+- Added 46 runtime test cases for partial and empty buckets, daily boundaries,
+  exact count reconciliation, full-window rate arithmetic, source selection,
+  scope validation, bucket budgets, deterministic routing and LLM gating.
+- The original KPI validation/filtering statements and existing supported
+  two-tool pairs were checked against their prior implementation. Pure-Python
+  arithmetic, grammar and installer checks passed locally. Polars/pytest and
+  real telemetry execution await the Mac run.
+- Previous full regression: 793 passed in 2.34s.
+- scripts/verify_temporal_kpi.py checks two independent references from the
+  original CSV against real source loading and complete reports/traces, then
+  saves benchmark evidence. It does not rebuild the event pool.
+
+Next action:
+Run .venv/bin/python -m pytest tests -q, then use this installer with
+--verify-real. Assess supported time semantics and operating schedules before
+offering downtime or utilization estimates.
+
+## Integration measurement — temporal KPIs 20260925-081458-607317
+
+- Hourly KPIs and daily observed-event throughput matched independent scalar counts and requested-interval arithmetic.
+- Partial intervals were clipped to requested bounds; all bucket counts reconciled with totals. Event fields and scope were preserved.
+- Reports distinguish recorded-event rates from production completeness, telemetry coverage and machine downtime.
+- Evidence: benchmarks/integration/temporal_kpi_20260925-081458-607317.json.
+- No live model calls. Timezone/operating schedules, idle classification and broader evaluation remain pending.

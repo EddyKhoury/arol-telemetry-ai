@@ -11,10 +11,7 @@ from ..analytics.torque_stats import _apply_status_filter
 from ..ingestion.adapter import PERSON_A_COLUMNS, adapt, describe
 from ..ingestion.event_pool import scan_event_pool
 
-SUPPORTED_TOOLS = frozenset({"torque_stats", "torque_distribution", "torque_trend",
-                             "detect_torque_anomalies", "head_correlation",
-                             "success_rate", "success_rate_per_head",
-                             "rank_heads_by_success", "compare_head_success"})
+SUPPORTED_TOOLS = frozenset(['compare_head_success', 'detect_torque_anomalies', 'head_correlation', 'kpi_over_time', 'observed_throughput', 'rank_heads_by_success', 'success_rate', 'success_rate_per_head', 'torque_distribution', 'torque_stats', 'torque_trend'])
 
 
 class ScopeTooLarge(ValueError):
@@ -115,6 +112,13 @@ class EventPoolSource:
     def load_for_plan(self, pool, calls):
         parsed = _read_plan(calls)
         name, args, scope, status = parsed[0]
+        if name in {'kpi_over_time', 'observed_throughput'}:
+            from ..analytics.registered_temporal_kpi import validate_request, TooManyTimeBuckets
+            try:
+                validate_request(args['machine_id'], args['start'], args['end'], args['bucket'],
+                                 self.cfg.get('analytics', {}).get('max_time_buckets', 1000))
+            except TooManyTimeBuckets as exc:
+                raise ScopeTooLarge(str(exc)) from exc
         # Validate the complete filter on an empty schema before opening data.
         filter_events(pl.DataFrame(schema=PERSON_A_COLUMNS).lazy(), **scope)
         if pool not in self.paths:
