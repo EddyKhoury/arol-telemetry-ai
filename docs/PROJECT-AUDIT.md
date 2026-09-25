@@ -7144,3 +7144,52 @@ offering downtime or utilization estimates.
 - Reports distinguish recorded-event rates from production completeness, telemetry coverage and machine downtime.
 - Evidence: benchmarks/integration/temporal_kpi_20260925-081458-607317.json.
 - No live model calls. Timezone/operating schedules, idle classification and broader evaluation remain pending.
+
+## Integration implementation — scoped demo command and presentation runbook
+
+- Added scripts/demo_agent.py as a repository-root command for an existing
+  complete event pool. It selects the sole local pool or requires --manifest
+  when there are several, generates three machine-scoped examples, and accepts
+  explicit --question arguments or interactive input.
+- The default is the verified rules planner. Optional --planner llm uses the
+  existing bounded five-single-torque validator; the trace names any fallback.
+  Neither path silently changes the requested head/machine/time/status scope.
+- Each question writes a separate Markdown report and JSON trace under one
+  ignored data/demo_runs session. --json emits one structured object per
+  question. Clarifications/degraded answers have nonzero scripted exit status
+  and still write a trace. Markdown only avoids unintegrated plot/PDF modules.
+- The source continues to enforce its configured row limit, preserving the
+  existing cap-present denominators, observed-event semantics and source
+  validation. No global anomaly diagnosis or causal finding was added.
+- The three unqualified 'which head behaves differently' questions need an
+  explicit comparison metric/reference; the three 'why H04 failing' questions
+  need a failure definition, peer baseline and bounded window. Existing
+  clarification behavior is preserved. The new explicit ranking/peer tools
+  answer narrower questions and do not imply a root cause.
+- docs/DEMO.md documents command use, event-pool setup on a new checkout,
+  local report/trace files, example questions and evidence limits.
+
+Verification:
+- Seven runtime cases exercise real manifest loading through the production
+  CLI, two sequential questions, saved report/trace parity, clarification
+  without a data scan, LLM KPI gate, example selection and invalid manifests.
+- A local pure-Python check verifies CLI selection and separate output paths;
+  transactional installer checks exercise clean and conflicting repos.
+- Previous full regression: 839 passed in 3.20s. New Polars/pytest and
+  real-data CLI smoke verification remain pending on the Mac.
+- scripts/verify_demo_agent.py reruns a previously independently validated H05
+  real question through the public CLI and compares its complete statistics,
+  scope, Markdown and trace to the saved reference. It does not claim a new
+  independent full CSV audit or held-out language evaluation.
+
+Next action:
+Run .venv/bin/python -m pytest tests -q, then this installer with
+--verify-real; inspect the CLI reports for the presentation and record
+additional held-out evaluation separately.
+
+## Integration measurement — demo CLI 20260925-083037-682363
+
+- The public command answered the verified H05 scoped torque question on the saved real event pool. Report, trace, scope and statistics matched the previous independent reference.
+- Rules planner; one tool call; no live model requests.
+- Evidence: benchmarks/integration/demo_cli_20260925-083037-682363.json.
+- Remaining diagnostic causes require explicit definitions; evaluate held-out queries and prepare the clean checkout before presenting.
