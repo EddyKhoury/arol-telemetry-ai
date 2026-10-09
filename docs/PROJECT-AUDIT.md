@@ -7427,3 +7427,33 @@ folder, generated demo session or backup directory. **Next:** apply this
 tracked-file cleanup to the user's Git checkout, review the staged deletion
 and audit note, commit and push. Preserve private telemetry and ignored local
 reports while preparing the live two-report demonstration.
+
+## Local browser demo verification (2026-10-09)
+
+Added `requirements-web.txt` with Streamlit 1.65.0 and `scripts/web_demo.py`.
+The page selects the complete local manifest, forces the rules planner, and
+calls the existing `demo_agent.answer_one()` path. Per-session reports,
+figures, and traces stay under ignored `data/web_demo_runs/`.
+
+The app compiled, `pip check` found no broken requirements, and the full
+suite passed (**863 tests**). In the local browser, the H05 successful-closure
+torque example returned `ok`, 7,575 observations, two calls
+(`torque_stats`, `torque_distribution`), and ten-bin counts
+`[3, 0, 0, 0, 0, 0, 0, 0, 0, 7572]`. The PNG displayed both the full range and
+the 7,564-reading central view, with 11 observations identified outside the
+zoom. Running the identical question through the CLI matched scope, calls,
+sample count, and bin counts.
+
+The H05 success-rate example returned `ok` and printed its denominators:
+7,575/7,575 confirmed cap-present events versus 13,167 observed events.
+An unscoped question returned `needs_clarification` for exceeding the
+1,000,000-event limit; its trace recorded zero analysis tool calls. Markdown,
+JSON, and PNG downloads opened; the downloaded PNG matched the saved image.
+Refreshing the tab cleared page state while saved reports remained on disk.
+
+This is a local presentation interface for observed exact +1 events, not a
+measure of complete production or a general chatbot. Counter discontinuities
+remain unreconstructed, the plant timestamp timezone is unconfirmed, and low
+torque readings require source-row and engineering-limit review. **Next:**
+use this local page during the presentation and keep the CLI and labelled
+synthetic sample reports as backups.
