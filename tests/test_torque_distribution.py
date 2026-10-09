@@ -111,6 +111,22 @@ def test_counts_sum_to_sample_size():
     ) == result["sample_size"]
 
 
+def test_dominant_bin_keeps_full_counts_and_labels_central_view():
+    events = pl.DataFrame({
+        "torque": [0.0] * 3 + [1.95 + (i % 51) * 0.002 for i in range(1000)],
+        "status": [0] * 1003,
+    })
+    result = torque_distribution(events, bins=10)
+
+    assert result["sample_size"] == sum(result["counts"]) == 1003
+    assert result["counts"][0] == 3
+    zoom = result["display_zoom"]
+    assert zoom["sample_size"] == sum(zoom["counts"])
+    assert zoom["sample_size"] + zoom["outside_count"] == 1003
+    assert zoom["bin_edges"][0] > 0
+    assert zoom["bin_edges"][-1] <= result["bin_edges"][-1]
+
+
 def test_successful_filter():
     result = torque_distribution(
         make_events(),

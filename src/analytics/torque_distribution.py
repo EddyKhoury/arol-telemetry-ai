@@ -273,8 +273,32 @@ def torque_distribution(
         bin_edges,
     )
 
-    return {
+    result = {
         "bin_edges": bin_edges,
         "counts": counts,
         "sample_size": sample_size,
     }
+
+    # A few extreme values can place nearly every observation into one
+    # full-range bin. Keep that requested histogram intact, and supply a
+    # separately labelled display view from the same filtered observations.
+    if sample_size >= 100 and max(counts) / sample_size >= 0.95:
+        limits = torque_events.select(
+            pl.col("torque").quantile(0.01, interpolation="nearest").alias("low"),
+            pl.col("torque").quantile(0.99, interpolation="nearest").alias("high"),
+        ).collect().row(0, named=True)
+        low, high = float(limits["low"]), float(limits["high"])
+        if low < high and (low > minimum or high < maximum):
+            central = torque_events.filter(pl.col("torque").is_between(low, high))
+            central_n = int(central.select(pl.len()).collect().item())
+            central_edges = _build_bin_edges(low, high, bins)
+            central_counts = _count_histogram_bins(central, central_edges)
+            result["display_zoom"] = {
+                "bin_edges": central_edges,
+                "counts": central_counts,
+                "sample_size": central_n,
+                "outside_count": sample_size - central_n,
+                "quantile_range": [0.01, 0.99],
+            }
+
+    return result

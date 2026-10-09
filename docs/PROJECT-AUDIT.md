@@ -7357,3 +7357,55 @@ inspect the PNG, review `git status` and the staged diff, then commit the
 intended project files. Run a clean-checkout demo before presentation; do
 not treat the negative real-data idle window as proof of complete detection
 accuracy.
+
+## Torque plot detail after live visual review (2026-10-09)
+
+The user inspected the real H05 10-bin PNG. Its broad counts were correct
+(`3` near zero and `7,572` in the final bin), but the three low readings
+stretched the horizontal axis and hid the main cluster.
+
+- `torque_distribution` preserves the requested full-range bin edges, counts
+  and sample size. If at least 95% of at least 100 readings occupy one bin,
+  it also calculates an explicitly labelled display histogram between the
+  nearest observed 1st and 99th percentile values, using the requested bin
+  count. Its result states the zoom count and the count outside the zoom.
+- `src/interface/plots.py` renders the full-range and central views side by
+  side when this optional result is present. The report labels both ranges
+  and states that observations outside the zoom remain in the full result.
+  The zoom is a visualization aid, not a different analytical denominator
+  or an engineering specification.
+- Added a focused count-preservation case in `tests/test_torque_distribution.py`;
+  documented the presentation rule in `docs/METHODS-AND-LIMITS.md`.
+- `py_compile` passed for changed Python files. A synthetic 7,575-reading
+  preview with three zero values rendered both panels and was visually
+  inspected. The existing local Polars environment crashed during import,
+  and a new isolated environment could not download packages due to network
+  restrictions; the full suite and real-data PNG must be checked on the Mac.
+
+**Next:** apply the guarded update to commit `d246cff`, run the focused and
+full Mac tests, regenerate the same real H05 plot, inspect it, then commit
+and push the correction. The original published report remains a valid
+full-range summary with poor visual resolution of its main cluster.
+
+## Mac validation of the torque plot detail (2026-10-09)
+
+The guarded plot update installed on the user's Mac checkout at `d246cff`.
+Focused tests returned **19 passed** and the full suite returned **863 passed**.
+The same real H05 successful-closure question for February 1, 2026,
+00:00–12:00, generated an `ok` report, trace and new PNG with two tool calls.
+The original 7,575-event ten-bin distribution remained
+`[3, 0, 0, 0, 0, 0, 0, 0, 0, 7572]` over 0–2.173 Nm. The optional
+central display range was 1.993–2.001 Nm, with 7,564 events inside and
+11 outside. Inclusive percentile endpoints can retain more than 98% when
+many observations share boundary values. Neither panel changes the observed
+event population or establishes physical torque acceptability.
+
+The user supplied a screenshot of the new Mac PNG. Visual inspection
+confirmed a full-range panel labelled 7,575 readings, a central panel labelled
+7,564 readings, axes in Nm and event counts, and a caption identifying 11
+readings outside the central view. The central bars are separated across the
+very narrow interval; discrete stored torque values can produce this shape.
+The screenshot does not independently establish the raw value frequencies or
+explain the low readings. Next: review, commit and push the six-file correction;
+validate those low values against original telemetry before interpreting them
+as physical faults or sensor errors.

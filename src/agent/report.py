@@ -196,12 +196,22 @@ def _finding_torque_distribution(result, meta):
     counts = result["counts"]
     shown = counts[:20]
     label = "Bin counts" if len(counts) <= 20 else "First 20 bin counts"
-    return [
+    lines = [
         f"- Histogram: {result['sample_size']:,} finite observations in {len(counts)} bins.",
         f"- Bin-edge range: {_analytics_number(result['bin_edges'][0])} to "
         f"{_analytics_number(result['bin_edges'][-1])} Nm.",
         f"- {label}: {shown}.",
     ]
+    if zoom := result.get("display_zoom"):
+        lines.append(
+            f"- Plot detail: central 1st–99th percentile range "
+            f"{_analytics_number(zoom['bin_edges'][0])} to "
+            f"{_analytics_number(zoom['bin_edges'][-1])} Nm contains "
+            f"{zoom['sample_size']:,} observations; "
+            f"{zoom['outside_count']:,} fall outside this zoom but remain in the "
+            "full-range histogram. Both panels use the requested bin count."
+        )
+    return lines
 
 
 def _finding_torque_trend(result, meta):

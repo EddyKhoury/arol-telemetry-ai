@@ -78,6 +78,15 @@ the first and last; the tool result stays complete. The optional HTML output
 uses the same findings. PDF export depends on a locally available supported
 browser and is not needed for the required Markdown report.
 
+When at least 95% of 100 or more torque readings fall into one requested
+full-range histogram bin, the analysis also returns a **display zoom**. It
+uses the nearest observed 1st and 99th percentile values as bounds, repeats
+the requested bin count for readings inside those bounds, and states how many
+readings lie outside. The plot shows both the original full-range histogram
+and the central view. The reported full-range counts and sample size never
+change; the zoom must not be read as a replacement population or a process
+specification.
+
 ## Agent decisions and evidence
 
 The default rules planner parses supported questions, preserves explicit

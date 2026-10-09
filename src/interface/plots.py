@@ -23,6 +23,33 @@ def _histogram(data, target):
     edges, counts = data.get("bin_edges", []), data.get("counts", [])
     if not counts or len(edges) != len(counts) + 1:
         return None
+    zoom = data.get("display_zoom")
+    if zoom:
+        z_edges, z_counts = zoom.get("bin_edges", []), zoom.get("counts", [])
+        if len(z_edges) != len(z_counts) + 1 or sum(z_counts) != zoom["sample_size"] \
+                or zoom["sample_size"] + zoom["outside_count"] != sum(counts):
+            zoom = None
+    if zoom:
+        fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
+        panels = ((axes[0], edges, counts, f"Full range · all {sum(counts):,} readings"),
+                  (axes[1], zoom["bin_edges"], zoom["counts"],
+                   f"Central 1st–99th percentiles · {zoom['sample_size']:,} readings"))
+        for ax, panel_edges, panel_counts, title in panels:
+            ax.bar(panel_edges[:-1], panel_counts,
+                   width=[b - a for a, b in zip(panel_edges, panel_edges[1:])],
+                   align="edge", edgecolor="white", color="#29627f")
+            ax.set_title(title, loc="left", fontsize=10)
+            ax.set_xlabel("Closure torque (Nm)")
+            ax.set_ylabel("Observed closures")
+            ax.grid(axis="y", alpha=0.2)
+        axes[1].text(0, -0.28,
+                     f"{zoom['outside_count']:,} readings outside zoom; included at left.",
+                     transform=axes[1].transAxes, fontsize=9)
+        fig.suptitle("Observed torque distribution", x=0.08, ha="left")
+        fig.tight_layout()
+        fig.savefig(target, dpi=150, facecolor="white")
+        plt.close(fig)
+        return target
     fig, ax = plt.subplots(figsize=(9, 4.5))
     ax.bar(edges[:-1], counts, width=[b - a for a, b in zip(edges, edges[1:])],
            align="edge", edgecolor="white", color="#29627f")
