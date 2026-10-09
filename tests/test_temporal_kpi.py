@@ -55,6 +55,8 @@ def test_partial_empty_and_boundary_buckets_reconcile(events,tool,lazy):
     assert o['n_observed']==5 and o['duration_seconds']==9900
     assert o['observed_events_per_hour']==pytest.approx(5/2.75)
     assert o['observed_events_per_hour'] != sum(v['observed_events_per_hour'] for v in rows)/4
+    assert r['incremental_mean_bucket_observed_rates'][-1] == pytest.approx(
+        sum(v['observed_events_per_hour'] for v in rows) / len(rows))
     assert o['n_cap_present']==3 and o['n_success_cap_present']==2
     assert o['n_reject_cap_present']==1 and o['n_reject_outside_cap_present']==1
     assert o['n_cap_unknown']==1 and o['n_no_load_class']==1

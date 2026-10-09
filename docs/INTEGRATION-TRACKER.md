@@ -1212,3 +1212,48 @@ review and presentation preparation.
 - H05 had four status-65 records and two planted torque limit breaches; describe these as signals, not causes.
 - Evidence: benchmarks/integration/agent_evaluation_20260925-084539-470253.json. No live LLM requests.
 - Remaining: clean checkout, presentation review, and any explicitly defined causal/operating-time inputs.
+
+## Integration checkpoint — planted anomaly precision and recall (2026-09-26)
+
+- New fixed truth: `benchmarks/evaluation/anomaly_truth_v1.json`, two synthetic two-file fixtures with five predeclared torque-deviation labels over 64 selected observed events.
+- New runner and tests: `scripts/evaluate_anomaly_ground_truth.py`, `tests/test_anomaly_ground_truth.py`; selected event fields are checked independently before production planner/source/registered anomaly execution. The results, reports and traces remain separately inspectable.
+- Measurement on uploaded archive: TP 4, FP 0, FN 1, TN 59; precision 100%, recall 80%, false positive rate 0% on **synthetic deviations**, not physical fault labels. One in-range 2.3 Nm planted deviation is missed. Evidence: `benchmarks/integration/anomaly_ground_truth_v1.json`.
+- Full suite on uploaded archive: 851 passed, 4 skipped. App production functions remain unchanged.
+- Added detailed root README and previously missing Person A, Person B and integration references under `docs/`; evaluation methods are recorded in `docs/EVALUATION.md`.
+- Next: install changed files on actual Git `main`, run tests and the new evaluation, inspect the diff and share the exact commit and rubric before final grading claims.
+
+## Proposal follow-up: idle, figures and sample deliverables (2026-10-08)
+
+- The integrated idle tool now reads scoped *raw* status rows. All heads must
+  indicate No Load for the configured number of consecutive observed seconds;
+  gaps and duplicates break continuity. Tests include a cross-file run.
+- `--plots` generates PNGs from successful tool outputs and links them in
+  Markdown. Synthetic sample reports demonstrate histogram, head KPI and
+  all-head No Load intervals.
+- Temporal tools also report a separate incremental, unweighted average of
+  bucket rates. `docs/METHODS-AND-LIMITS.md` records the event and denominator
+  definitions relevant to the professor's illustrative examples.
+- Uploaded snapshot regression after changes: 856 passed, 4 skipped. These
+  changes have not been verified on the user's Mac Git checkout or original
+  full raw telemetry pool.
+
+## Presentation draft and handoff (2026-10-08)
+
+- Added a validated 13-slide editable deck and rehearsal notes under
+  `docs/presentation/`. Charts in the slides are synthetic and are labelled;
+  recorded real-data numbers retain their named scope.
+- Remaining handoff: install this snapshot in the user's Git checkout, rerun
+  tests and the new `scripts.verify_idle_real` original-data check, inspect the PPTX in the presentation app,
+  and rehearse the live demo.
+
+## Raw-status float compatibility fix (2026-10-08)
+
+- First original-CSV idle check stopped before dispatch because raw Parquet
+  status columns can be Float64 even after the event builder validates the
+  whole-number codes for its internal frame.
+- The raw idle source now accepts integer or float status columns and verifies
+  finite, exactly representable whole-number values in the selected window.
+  Fractional or invalid values stop the analysis without a tool call.
+- Added real-schema regression and fractional-status rejection tests. Snapshot
+  suite: 858 passed, 4 standalone-repository skips. The bounded original-CSV
+  comparison must be repeated on the user's Mac after installing this fix.

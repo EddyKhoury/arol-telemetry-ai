@@ -23,6 +23,25 @@ inside a new session under `data/demo_runs/`. The directory is ignored by Git.
 Use `--output DIR` to select another parent directory. Add `--json` to a
 scripted `--question` for one JSON object per question. A command with any
 clarification or degraded outcome exits with status 2 and still saves a trace.
+Pass `--plots` on a chartable analysis to save PNG figures linked from the
+Markdown report. A fresh checkout also includes three [synthetic sample
+reports](samples/README.md) with figures and a documented generator.
+
+To compare one short idle window directly with the original CSV status rows
+after installing this update, run from the project root (change `--csv-dir`
+if the 89 original telemetry CSVs are elsewhere):
+
+```bash
+.venv/bin/python -m scripts.verify_idle_real \
+  --manifest data/event_pools/continuous-20260924-080513-930170/manifest.json \
+  --csv-dir data \
+  --start 2026-02-01T15:55:00 --end 2026-02-01T16:05:00
+```
+
+It checks the original CSV hashes in the manifest and compares an independent
+raw-status loop with the integrated `machine_idle` result. A matching result
+with zero qualifying periods verifies this window's computation; it does not
+establish whether there was a qualifying idle interval elsewhere in the pool.
 
 Try a bounded success-rate question or a daily observed-throughput question:
 
@@ -31,6 +50,8 @@ Try a bounded success-rate question or a daily observed-throughput question:
   'Success rate for head 5 for machine MCC777eda3db57348ef8a3113a642ae74db from 2026-02-01T00:00:00 until 2026-02-01T12:00:00'
 .venv/bin/python -m scripts.demo_agent --question \
   'Observed throughput by hour for machine MCC777eda3db57348ef8a3113a642ae74db from 2026-02-01T00:00:00 until 2026-02-01T01:00:00'
+.venv/bin/python -m scripts.demo_agent --plots --question \
+  'Machine idle for machine MCC777eda3db57348ef8a3113a642ae74db from 2026-02-01T00:00:00 until 2026-02-01T01:00:00'
 ```
 
 The default planner is deterministic rules. `--planner llm` requests the

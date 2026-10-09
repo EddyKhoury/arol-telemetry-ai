@@ -60,7 +60,7 @@ def examples(manifest: dict) -> list[str]:
 
 
 def answer_one(question: str, cfg: dict, output: Path, sequence: int,
-               *, json_output: bool = False) -> tuple[str, str]:
+               *, json_output: bool = False, plots: bool = False) -> tuple[str, str]:
     """Give each question separate report and trace directories to avoid collisions."""
     settings = deepcopy(cfg)
     folder = output / f'question-{sequence:03d}'
@@ -68,16 +68,17 @@ def answer_one(question: str, cfg: dict, output: Path, sequence: int,
     settings['agent']['trace_dir'] = str(folder / 'traces')
     engine = Orchestrator(cfg=settings)
     result = engine.answer(question, pool='demo')
-    artifacts = engine.deliver(result, formats=['markdown'])
+    artifacts = engine.deliver(result, formats=['markdown', 'plots'] if plots else ['markdown'])
+    delivered = Path(artifacts['report']).read_text(encoding='utf-8')
     trace = result['trace'].to_dict()
     if json_output:
         return json.dumps({'status': result['status'], 'query': question,
                            'planner': trace['planner'],
                            'planned_calls': result['plan'].calls if result['plan'] else [],
                            'results': result['results'], 'message': result['message'],
-                           'markdown': result['markdown'], 'trace': trace,
+                           'markdown': delivered, 'trace': trace,
                            'artifacts': artifacts}, allow_nan=False), result['status']
-    return (result['markdown'].rstrip() + '\n\n'
+    return (delivered.rstrip() + '\n\n'
             + f"Status: {result['status']} | Planner: {trace['planner']} | "
             + f"Tool calls: {trace['n_tool_calls']}\n"
             + '\n'.join(f'{key}: {value}' for key, value in artifacts.items())), result['status']
@@ -91,6 +92,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--planner', choices=('rules', 'llm'), default='rules',
                         help='Rules by default; LLM only for previously verified single torque analyses')
     parser.add_argument('--json', action='store_true', help='Output one JSON object per question')
+    parser.add_argument('--plots', action='store_true', help='Save PNG figures and embed links in reports where tool outputs permit')
     parser.add_argument('--output', type=Path, help='Parent directory for a new isolated report session')
     args = parser.parse_args(argv)
     if Path.cwd().resolve() != ROOT:
@@ -139,7 +141,7 @@ def main(argv: list[str] | None = None) -> int:
             if not query:
                 parser.error('--question cannot be empty')
         index += 1
-        response, status = answer_one(query, cfg, output, index, json_output=args.json)
+        response, status = answer_one(query, cfg, output, index, json_output=args.json, plots=args.plots)
         print(response, flush=True)
         if status != 'ok':
             errors += 1

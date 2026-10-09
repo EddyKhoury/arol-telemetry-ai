@@ -20,7 +20,7 @@ import re
 from dataclasses import dataclass, field
 
 from ..common import registry, timeutils
-from ..analytics import registered_torque, registered_analytics, registered_kpi, registered_head_kpi, registered_temporal_kpi  # noqa: F401
+from ..analytics import registered_torque, registered_analytics, registered_kpi, registered_head_kpi, registered_temporal_kpi, registered_idle  # noqa: F401
 
 
 @dataclass
@@ -122,6 +122,10 @@ class RulePlanner(Planner):
     name = "rules"
 
     def plan(self, query: str, context: dict) -> Plan:
+        from .idle_routing import parse_idle_request
+        idle_plan = parse_idle_request(query)
+        if idle_plan is not None:
+            return Plan(**idle_plan)
         torque_plan = _plan_torque_stats(query)
         if torque_plan is not None:
             return torque_plan

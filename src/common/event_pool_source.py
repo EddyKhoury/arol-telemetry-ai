@@ -11,7 +11,7 @@ from ..analytics.torque_stats import _apply_status_filter
 from ..ingestion.adapter import PERSON_A_COLUMNS, adapt, describe
 from ..ingestion.event_pool import scan_event_pool
 
-SUPPORTED_TOOLS = frozenset(['compare_head_success', 'detect_torque_anomalies', 'head_correlation', 'kpi_over_time', 'observed_throughput', 'rank_heads_by_success', 'success_rate', 'success_rate_per_head', 'torque_distribution', 'torque_stats', 'torque_trend'])
+SUPPORTED_TOOLS = frozenset(['compare_head_success', 'detect_torque_anomalies', 'head_correlation', 'kpi_over_time', 'machine_idle', 'observed_throughput', 'rank_heads_by_success', 'success_rate', 'success_rate_per_head', 'torque_distribution', 'torque_stats', 'torque_trend'])
 
 
 class ScopeTooLarge(ValueError):
@@ -58,6 +58,11 @@ def _read_parameters(calls):
             # This tool explicitly requests peer data; head_id denotes its
             # focus, while machine/time bound the shared comparison population.
             scope.pop('head_id')
+    if name == 'machine_idle':
+        from ..analytics.event_filters import _bound
+        lo, hi = _bound(args['start']), _bound(args['end'])
+        if lo is None or hi is None or lo >= hi or not args['machine_id'].strip():
+            raise ValueError('Idle analysis requires one machine and a bounded start before end')
     return name, args, scope, status
 
 
@@ -82,6 +87,86 @@ def _read_plan(calls):
 
 def _stat_signature(paths):
     return [(str(path), path.stat().st_size, path.stat().st_mtime_ns) for path in paths]
+
+
+def _read_raw_idle(manifest_path, manifest, args, *, limit, verify_hashes):
+    """Select validated per-second status rows from raw pool partitions."""
+    from ..analytics.event_filters import _bound
+    lo, hi = _bound(args['start']), _bound(args['end'])
+    if manifest['summary']['machine_id'] != args['machine_id']:
+        raise ValueError('Requested machine differs from the raw telemetry pool')
+    # Also validate event partitions, manifest structure and optional hashes.
+    scan_event_pool(manifest_path, verify_hashes=verify_hashes)
+    paths, frames, heads = [], [], None
+    root = manifest_path.parent
+    for entry in manifest['partitions']:
+        relative = Path(entry['raw_parquet'])
+        path = (root / relative).resolve()
+        if relative.is_absolute() or not path.is_relative_to(root) or path in paths or not path.is_file():
+            raise ValueError('Invalid or duplicate raw partition in manifest')
+        paths.append(path)
+        frame = pl.scan_parquet(path)
+        cols = frame.collect_schema()
+        present = sorted(name[:-7] for name in cols if name.endswith(' Status'))
+        if (not present or (heads is not None and heads != present)
+                or len(present) != manifest['summary']['heads']
+                or cols.get('timestamp') != pl.Datetime('us')
+                or any(not (cols[f'{head} Status'].is_integer()
+                            or cols[f'{head} Status'].is_float()) for head in present)):
+            raise ValueError('Invalid raw status partition schema')
+        heads = present
+        status_valid = []
+        for head in heads:
+            name = f'{head} Status'
+            column = pl.col(name)
+            dtype = cols[name]
+            valid = column.is_not_null()
+            if dtype.is_float():
+                # Raw CSV inference can store codes such as 2.0 as floats.
+                # Mirror the builder's whole-number and exact-range checks
+                # before using those values as categorical status codes.
+                representable_limit = 2 ** (24 if dtype == pl.Float32 else 53) - 1
+                valid = (valid & column.is_finite() & ((column % 1) == 0)
+                         & (column.abs() <= representable_limit))
+            elif dtype == pl.UInt64:
+                valid = valid & (column <= 2**63 - 1)
+            status_valid.append(valid)
+        is_all_no_load = pl.all_horizontal(
+            [pl.col(f'{head} Status').is_in([2, 3]) for head in heads]
+        )
+        frames.append(frame.filter((pl.col('timestamp') >= lo) & (pl.col('timestamp') < hi))
+                      .select(pl.col('timestamp').alias('ts'),
+                              pl.lit(args['machine_id']).alias('machine_id'),
+                              is_all_no_load.alias('all_heads_no_load'),
+                              pl.all_horizontal(status_valid).alias('_status_valid')))
+    signature = _stat_signature(paths)
+    selected = pl.concat(frames, how='vertical')
+    n = selected.select(pl.len()).collect().item()
+    if n > limit:
+        raise ScopeTooLarge(f'Idle window contains {n:,} raw readings; the limit is {limit:,}. Select a shorter time window.')
+    rows = selected.limit(limit + 1).collect()
+    if (_stat_signature(paths) != signature or len(rows) != n):
+        raise ValueError('Raw telemetry pool changed during idle analysis')
+    if not rows['_status_valid'].fill_null(False).all():
+        raise ValueError('Raw status must be finite, exactly representable whole numbers')
+    rows = rows.drop('_status_valid')
+    # No timestamp sort: source order is the temporal evidence. A backwards
+    # transition fails, while duplicate/gapped timestamps break a run.
+    if rows.height > 1 and (rows['ts'].diff().dt.total_microseconds() < 0).any():
+        raise ValueError('Raw timestamps go backwards within the selected scope')
+    meta = {
+        'pool_total_events': manifest['summary']['observed_events'],
+        'loaded_events': 0, 'n_events': 0, 'pool': None,
+        'source': 'person_a_pool', 'n_raw_readings': n, 'heads': heads,
+        'machines': [args['machine_id']], 'schema_version': '1.0',
+        'ts_min': rows['ts'].min().isoformat() if n else None,
+        'ts_max': rows['ts'].max().isoformat() if n else None,
+        'timezone': None,
+        'warnings': ['Idle candidates use raw status readings, not closure events. A missing poll, '
+                     'duplicate timestamp or other status breaks continuity. These candidates '
+                     'do not prove machine downtime or a physical cause.'],
+    }
+    return rows, meta
 
 
 class EventPoolSource:
@@ -126,6 +211,16 @@ class EventPoolSource:
         manifest_path = self.paths[pool]
         manifest_bytes = manifest_path.read_bytes()
         manifest = json.loads(manifest_bytes)
+        if name == 'machine_idle':
+            readings, meta = _read_raw_idle(manifest_path, manifest, args,
+                                            limit=self.max_events, verify_hashes=self.verify_hashes)
+            if manifest_path.read_bytes() != manifest_bytes:
+                raise ValueError('Event-pool manifest changed during idle analysis')
+            meta.update(pool=pool, event_manifest=str(manifest_path),
+                        timezone=self.cfg.get('data', {}).get('timezone'),
+                        selection_parameters=dict(args), loaded_raw_readings=len(readings),
+                        materialization='selected raw status readings only')
+            return readings, meta
         lazy = scan_event_pool(manifest_path, verify_hashes=self.verify_hashes)
         total = manifest["summary"]["observed_events"]
         partitions = manifest["partitions"]

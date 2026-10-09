@@ -3,6 +3,7 @@ from datetime import timedelta
 import polars as pl
 
 from .event_filters import _bound
+from .capping_speed import incremental_average
 from .registered_kpi import _prepare, _aggregations, finish_counts, DEFINITIONS
 from ..common.runtime import current_config
 from ..common.registry import tool
@@ -72,11 +73,20 @@ def _run(events, *, machine_id, start, end, bucket, head_id=None, throughput=Fal
         counts = finish_counts(buckets.get(bounds['calendar_bucket_start'], empty), min_n)
         by_bucket.append(dict(bounds, **add_observed_rates(counts, bounds['duration_seconds']),
                               has_observations=counts['n_observed'] > 0))
+    # The brief also requests an incremental average of capping speed. Keep
+    # this unweighted running mean separate from the duration-weighted overall
+    # rate, because clipped/partial calendar buckets can have unequal lengths.
+    running_mean = 0.0
+    running_bucket_rates = []
+    for index, row in enumerate(by_bucket, 1):
+        running_mean = incremental_average(running_mean, row['observed_events_per_hour'], index)
+        running_bucket_rates.append(running_mean)
     # Distinct intervals form an exact partition of the requested half-open window.
     if any(sum(row[key] for row in by_bucket) != overall[key] for key in empty):
         raise ValueError('Bucket counts do not reconcile with overall counts')
     seconds = (_bound(end)-_bound(start)).total_seconds()
     result = dict(overall=add_observed_rates(overall, seconds), by_bucket=by_bucket,
+                  incremental_mean_bucket_observed_rates=running_bucket_rates,
                   requested_window=dict(start=start, end=end), bucket=bucket, n_buckets=len(grid),
                   rate_definitions=dict(DEFINITIONS),
                   throughput_denominator='requested interval duration, not observed first-to-last event span',
@@ -96,6 +106,7 @@ def _run(events, *, machine_id, start, end, bucket, head_id=None, throughput=Fal
                     filters_applied=applied, window=data_window(frame), notes=notes,
                     units={**{name:'fraction' for name in DEFINITIONS},'duration_seconds':'s',
                            'observed_events_per_hour':'observed events/hour',
+                           'incremental_mean_bucket_observed_rates':'observed events/hour (unweighted bucket mean)',
                            'cap_present_events_per_hour':'cap-present events/hour',
                            'successful_events_per_hour':'successful observed events/hour'})
 

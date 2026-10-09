@@ -92,9 +92,24 @@ def _finding_idle_periods(result, meta) -> list[str]:
                  f"{longest['end']} ({longest['duration_seconds']:.0f}s, "
                  f"{longest['n_cycles']:,} empty cycles).")
     if len(result["heads_affected"]) > 1:
-        lines.append("- The stretch spans multiple heads at the same time, "
-                     "which points at supply upstream of the machine rather "
-                     "than at any one head.")
+        lines.append("- The stretch spans multiple heads at the same time; "
+                     "review independent process signals before attributing a cause.")
+    return lines
+
+
+def _finding_machine_idle(result, meta) -> list[str]:
+    lines = [f"- Raw status readings inspected: **{result['n_raw_readings']:,}**; "
+             f"every head reported No Load on {result['n_all_heads_no_load']:,} of them.",
+             f"- Continuity breaks: {result['timestamp_gaps']} timestamp gaps and "
+             f"{result['duplicate_timestamps']} repeated timestamps.",
+             f"- Found **{result['n_periods']}** all-head No Load interval(s) "
+             f"with at least {result['threshold_seconds']} consecutive one-second readings."]
+    for period in result['idle_periods'][:20]:
+        lines.append(f"- [{period['start']}, {period['end']}): "
+                     f"{period['duration_seconds']} observed seconds.")
+    if result['n_periods'] > 20:
+        lines.append(f"- {result['n_periods'] - 20} additional intervals are in the structured tool result.")
+    lines.append('- This status pattern is an idle candidate; operating schedule and independent machine signals are needed to establish downtime.')
     return lines
 
 
@@ -278,6 +293,11 @@ def _finding_temporal(result, meta, *, throughput=False):
         f"- Requested window: {result['requested_window']['start']} to {result['requested_window']['end']} (end exclusive); {total['duration_seconds']:g} stored-timestamp seconds.",
         f"- Observed exact +1 events: **{total['n_observed']:,}**; cap-present: **{total['n_cap_present']:,}**; successful: **{total['n_success_cap_present']:,}**.",
         f"- Overall observed-event rate: **{total['observed_events_per_hour']:.6g}/hour**, using the full requested duration.",
+        (f"- Incremental average of the {result['n_buckets']} bucket rates: "
+         f"{result['incremental_mean_bucket_observed_rates'][-1]:.6g}/hour "
+         "(unweighted; partial buckets differ in length)."
+         if result.get('incremental_mean_bucket_observed_rates') else
+         "- No bucket rates are available for an incremental average."),
         f"- Unknown cap presence: {total['n_cap_unknown']:,}; rejection flags outside cap-present rows: {total['n_reject_outside_cap_present']:,}.",
         '- Empty buckets mean no recorded events. They do not establish zero production or machine downtime; telemetry coverage is unverified.',
         '- Buckets use timestamps as stored. Timezone, DST elapsed-time effects and operating-time utilization are not established.',
@@ -322,6 +342,7 @@ FINDING_TEMPLATES = {
     "success_rate_per_head": _finding_success_rate_per_head,
     "anomaly_heads": _finding_anomaly_heads,
     "idle_periods": _finding_idle_periods,
+    "machine_idle": _finding_machine_idle,
     "throughput": _finding_throughput,
     "head_detail": _finding_head_detail,
 }
@@ -346,15 +367,19 @@ def assemble(query, plan, results, pool_meta, trace, *, min_n=30) -> str:
         "",
         "## 2. Data used",
         "",
-        f"- Pool `{pool_meta.get('pool')}` from the **{pool_meta.get('source', '?')}** "
-        f"source, {pool_meta.get('n_events', 0):,} closure events "
-        f"across {len(pool_meta.get('heads', []))} heads.",
+        (f"- Pool `{pool_meta.get('pool')}` from the **{pool_meta.get('source', '?')}** source, "
+         f"{pool_meta['n_raw_readings']:,} raw status readings across "
+         f"{len(pool_meta.get('heads', []))} heads."
+         if pool_meta.get('n_raw_readings') is not None else
+         f"- Pool `{pool_meta.get('pool')}` from the **{pool_meta.get('source', '?')}** "
+         f"source, {pool_meta.get('n_events', 0):,} closure events "
+         f"across {len(pool_meta.get('heads', []))} heads."),
         f"- Window {pool_meta.get('ts_min')} to {pool_meta.get('ts_max')} "
         f"(plant-local, "
         f"{pool_meta.get('timezone') or 'timezone unconfirmed'}).",
         f"- Machines: {', '.join(pool_meta.get('machines', [])) or 'n/a'}.",
     ]
-    if pool_meta.get("pool_total_events") is not None:
+    if pool_meta.get("pool_total_events") is not None and pool_meta.get('n_raw_readings') is None:
         out.append(
             f"- Events loaded for the requested scope: {pool_meta['loaded_events']:,} "
             f"of {pool_meta['pool_total_events']:,} stored observed events in this pool."
@@ -454,17 +479,18 @@ def _next_checks(ok_results, failed) -> list[str]:
             checks.append("- Review unknown status/cap-presence counts, sample sizes and observation coverage before comparing rates. These summaries do not establish machine stability or a fault cause.")
         if name in {'kpi_over_time', 'observed_throughput'}:
             checks.append('- Check raw telemetry coverage and the operating schedule before interpreting empty intervals or changes in observed-event rates.')
+        if name == 'machine_idle':
+            checks.append('- Compare candidate No Load intervals with the machine operating schedule and independent alarm or sensor logs before calling them downtime.')
         if name == "anomaly_heads" and r.get("flagged_heads"):
             head = r["flagged_heads"][0]["head_id"]
             checks.append(f"- Run a torque distribution and drift check on "
-                          f"`{head}` to separate a mechanical fault from a "
-                          f"settings error (Person A's tools).")
+                          f"`{head}` to examine its measured behavior.")
             checks.append(f"- Compare `{head}` against its neighbours to see "
                           f"whether the fault is positional.")
         if name == "idle_periods" and r.get("idle_periods"):
             checks.append("- Cross-check the idle window against upstream "
-                          "filler/conveyor logs; simultaneous idling on every "
-                          "head is a supply problem, not a capping problem.")
+                          "filler/conveyor logs and the operating schedule "
+                          "before attributing a cause.")
         if name == "throughput" and r.get("n_inferred_closures"):
             checks.append("- Investigate the dropped polls: counter jumps "
                           "greater than one mean the 1 Hz sampling missed a "
@@ -475,8 +501,8 @@ def _next_checks(ok_results, failed) -> list[str]:
             "before retrying."
         )
     if not checks:
-        checks.append("- Nothing anomalous surfaced; re-run against a longer "
-                      "window to confirm the machine is stable over time.")
+        checks.append("- Review coverage and select a suitable comparison "
+                      "window before interpreting an absence of flags.")
     return checks
 
 

@@ -7245,3 +7245,115 @@ review and presentation preparation.
 - H05 had four status-65 records and two planted torque limit breaches; describe these as signals, not causes.
 - Evidence: benchmarks/integration/agent_evaluation_20260925-084539-470253.json. No live LLM requests.
 - Remaining: clean checkout, presentation review, and any explicitly defined causal/operating-time inputs.
+
+## Integration checkpoint — predeclared anomaly precision and recall (2026-09-26)
+
+**Source:** user-provided `arol-telemetry-ai-main(2).zip` (SHA-256 `cfd8cedee45471cdd990fc368ea2e7eafb7255ec7f7f503be1f0902696bb65d4`), which does not contain Git commit metadata. Changes were made on an extracted copy of that archive. Production ingestion, decoding, routing and analytics functions were not changed.
+
+### Implemented functions and evidence
+
+- Added `benchmarks/evaluation/anomaly_truth_v1.json`: fixed, explicit labels for two synthetic two-file datasets. The original four-head fixture contains two H05 torque breaches among 12 selected H05 events. A new H05 fixture contains 52 selected events and three planted deviations, including a 2.3 Nm value within the configured 1.5–2.5 Nm bounds.
+- Added `scripts/evaluate_anomaly_ground_truth.py`: `plant_contextual_input` creates the second fixture from its predeclared values; `raw_oracle` reads CSV counters and current-row fields without invoking the event builder; `score_flags` compares timestamp/machine/head event IDs to the predeclared truth; `evaluate_case` checks Parquet field preservation and runs the production rules planner, scoped source, registered anomaly tool, Markdown report and trace; `main` aggregates case counts and saves JSON evidence, including failures.
+- Added `tests/test_anomaly_ground_truth.py`: verifies event-ID scoring across heads, rejection of duplicate/unknown predicted IDs, and the complete production path on both two-file fixtures.
+- Saved results in `benchmarks/integration/anomaly_ground_truth_v1.json`. The 64 selected observed events yield **TP=4, FP=0, FN=1, TN=59**, precision=1.0, recall=0.8 and false positive rate=0.0. The missed labelled value is 2.3 Nm within configured limits; these results describe planted torque deviations, not labelled physical capping failures.
+- Added the previously missing `README.MD` expansion and `docs/PERSON-A-REFERENCE.md`, `docs/PERSON-B-REFERENCE.md`, `docs/INTEGRATION-REFERENCE.md`; the integrated function inventory was cross-checked against the uploaded archive. Updated `docs/EVALUATION.md` with the procedure, denominators and limitations.
+
+### Verification and interpretation
+
+- `.test-venv/bin/python -m pytest tests -q`: **851 passed, 4 skipped** on the uploaded ZIP in a new local virtual environment. The four skips require the separate Person B standalone repository, which is unavailable in this extracted ZIP. This run's count differs from tests performed on the original Mac with that checkout.
+- `.test-venv/bin/python -m scripts.evaluate_anomaly_ground_truth --evidence benchmarks/integration/anomaly_ground_truth_v1.json`: both cases checked, one tool call per case; the independent selected-event field oracle and cross-file baseline checks passed.
+- This meets the working spec's request to *measure* planted-signal precision and recall. The in-range contextual label is synthetic and not confirmed engineering ground truth; the controlled set is small and was specified in advance. Do not claim a real-world fault detection rate or general LLM reliability from these numbers. Configured torque limits require process confirmation.
+- Next: apply this archive-based change to the exact Git checkout, rerun the tests and evaluator there, record the commit ID and local output, then check the professor's rubric and rehearse the presentation. Avoid stating that M5/M6 is formally approved without the rubric.
+
+## Integration checkpoint — professor proposal review follow-up (2026-10-08)
+
+**Scope:** Changes in an extracted upload of the project, pending application
+to the user's Mac Git checkout. Reviewed the professor's 20-slide proposal.
+
+- Added `registered_idle.machine_idle` and `find_idle_periods` with a scoped
+  raw-status reader in `EventPoolSource`, a strict request parser, safe report
+  wording and tests. All heads must have status 2/3 on consecutive observed
+  seconds; gaps, duplicate timestamps and other statuses break a run. The
+  default threshold is `analytics.idle_window_seconds=300`. Candidate intervals
+  do not prove physical downtime or a cause.
+- Added headless plotting for returned histogram, trend, head KPI, time bucket
+  and idle results, with `--plots` in the demo CLI; repaired the optional
+  `src/interface` import path and retained Markdown/JSON delivery. Added a
+  pinned Matplotlib dependency.
+- Added a separate incremental mean of bucket observed-rate values using
+  Person A's `incremental_average`. It is explicitly labelled as unweighted,
+  while the overall rate uses the complete requested duration.
+- Added `scripts/generate_sample_reports.py`, three synthetic sample Markdown
+  reports and their figures under `docs/samples/`, plus
+  `docs/METHODS-AND-LIMITS.md` to explain duplicates, closure populations,
+  denominators, statuses and timestamps without claiming unobserved events.
+- New verification: 3 idle tests, 2 plotting tests and one incremental mean
+  assertion. Clean temporary Python 3.12 environment:
+  `python -m pytest tests -q` returned **856 passed, 4 skipped**. The four
+  skips require a separate standalone Person B repository not in this upload.
+
+**Next:** apply this change to the exact Git checkout and rerun the suite there.
+Evaluate an idle window from original raw CSVs against an independent raw
+status reference, verify PNG output on the presentation Mac, and confirm the
+physical meaning of No Load and duplicate handling with the data owner.
+
+## Presentation deliverable (2026-10-08)
+
+An editable 13-slide deck, `docs/presentation/AROL_Telemetry_Project_Review.pptx`,
+passed PPTX package and slide-layout validators. Its three numerical evidence
+categories remain distinct: recorded pool/KPI counts, controlled evaluation
+results, and synthetic figures. `docs/presentation/README.md` supplies the
+rehearsal order and claims to qualify. The final Mac checkout install, original
+raw-status comparison and in-app visual inspection remain to be completed.
+The new `scripts/verify_idle_real.py` compares a bounded idle query against
+the original hash-checked CSV statuses. It passed a synthetic two-file smoke
+run; original data are available only in the user's local checkout.
+
+## Raw status schema correction (2026-10-08)
+
+The first Mac comparison surfaced a valid Float64 storage type for the raw
+`Hxx Status` columns. The builder had already validated these as whole-number
+codes before building events, but the new idle reader incorrectly required
+integer Parquet columns. `EventPoolSource._read_raw_idle` now validates selected
+float statuses as finite, exactly representable whole numbers before checking
+the all-head No Load condition. It still rejects fractional values, nulls,
+nonfinite values and malformed schemas without an analysis call. A local float
+schema and a tampered fractional-status test were added; 858 tests passed and
+4 separate-repository tests skipped in the uploaded snapshot. Next: rerun the
+bounded original-CSV comparison and the full Mac suite before committing.
+
+## Mac checkout verification of raw idle parity (2026-10-08)
+
+After the Float64 raw-status fix, the user's Mac checkout ran 862 tests
+successfully. The bounded independent check in `scripts.verify_idle_real`
+compared the original hash-checked CSV statuses with the integrated
+`machine_idle` tool for machine `MCC777eda3db57348ef8a3113a642ae74db`,
+`2026-02-01T15:55:00` to `16:05:00` (end exclusive), threshold 300 seconds.
+Both paths agreed on 600 raw readings and zero qualifying intervals; the
+orchestrator dispatched one tool call. This verifies that specific boundary
+window, not idle detection or production coverage across the full 89-file
+pool. The README merge was installed in the Mac checkout on October 9.
+The live plot and final review are recorded in the following checkpoint.
+
+## Mac checkout live plot verification (2026-10-09)
+
+The guarded README merge installed successfully and `git diff --check`
+reported no formatting errors. On the same real-data manifest,
+`scripts.demo_agent --plots` answered a scoped head H05 successful-closure
+question for `2026-02-01T00:00:00` to `12:00:00` with 10 torque bins. The
+rule planner called `torque_stats` and `torque_distribution` once each; both
+returned `ok` over the same 7,575 observed events. The CLI saved a Markdown
+report, JSON trace and `torque_distribution.png` in the local demo session.
+The reported mean was 1.99575 Nm and the bin counts were
+`[3, 0, 0, 0, 0, 0, 0, 0, 0, 7572]`. The rare zero torque values stretch
+the bin range and compress most readings into one bin; the 10-bin plot is
+valid for that requested range but is a poor detailed view of the main
+distribution. No visual inspection of the Mac PNG was supplied.
+
+**Milestone status:** code, synthetic examples, written methods and slides
+are present in the user's Mac checkout; 862 tests passed after the idle fix,
+and the bounded raw idle parity and plot export commands completed. Next:
+inspect the PNG, review `git status` and the staged diff, then commit the
+intended project files. Run a clean-checkout demo before presentation; do
+not treat the negative real-data idle window as proof of complete detection
+accuracy.

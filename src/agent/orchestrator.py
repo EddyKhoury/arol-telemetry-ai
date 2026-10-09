@@ -10,7 +10,7 @@ from ..common import config as config_mod
 from ..common import datasource, registry
 from ..common.event_pool_source import ScopeTooLarge
 from ..common.runtime import dispatch_tool
-from ..analytics import registered_torque, registered_analytics, registered_kpi, registered_head_kpi, registered_temporal_kpi  # noqa: F401
+from ..analytics import registered_torque, registered_analytics, registered_kpi, registered_head_kpi, registered_temporal_kpi, registered_idle  # noqa: F401
 from . import report as report_mod
 from .planner import get_planner
 from .trace import Trace
@@ -197,6 +197,12 @@ class Orchestrator:
             figures = plots_mod.render(answer["results"],
                                        report_dir / md_path.stem)
             paths["figures"] = [str(p) for _, p in figures]
+            if figures:
+                additions = ["", "## Figures", ""]
+                additions.extend(f"![{name}]({p.relative_to(report_dir).as_posix()})"
+                                 for name, p in figures)
+                md_path.write_text(answer["markdown"].rstrip() + "\n" +
+                                   "\n".join(additions) + "\n", encoding="utf-8")
 
         if "html" in wanted or "pdf" in wanted:
             from ..interface import export as export_mod

@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "truth_sha256": "97f886e8df0ea7df339f80a030a501bdd791f1f0a77e9355506e5eaba082b25d",
+  "evaluation_script_sha256": "59112c9e2984e5dd28423d2ce64d26114109e094d0cb8360f4bb20eef7cae2e4",
+  "case_results": [
+    {
+      "case": "existing_two_file_fixture",
+      "machine_id": "M1",
+      "head_id": "H05",
+      "question": "Find torque anomalies for head 5 for machine M1 from 2026-02-01T00:00:00 until 2026-02-01T00:00:13",
+      "n_observed": 12,
+      "n_truth": 2,
+      "n_flagged": 2,
+      "boundary_events": 4,
+      "selected_head_boundary_events": 1,
+      "tp": 2,
+      "fp": 0,
+      "fn": 0,
+      "tn": 10,
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive_rate": 0.0,
+      "missed_event_ids": [],
+      "flagged_event_ids": [
+        [
+          "2026-02-01T00:00:06",
+          "M1",
+          "H05"
+        ],
+        [
+          "2026-02-01T00:00:07",
+          "M1",
+          "H05"
+        ]
+      ],
+      "flagged_reasons": {
+        "2026-02-01 00:00:06.000000": "above_expected_max",
+        "2026-02-01 00:00:07.000000": "below_expected_min"
+      },
+      "source_sha256": [
+        "900bd1e918eb2940a8f6bbcec6195ae2933807c199c389445ded1bd1544d8eeb",
+        "7198fab68a05a734aed7efa018b1b8a12a9e64542254a80f7452edcfb293d55d"
+      ],
+      "report": "data/integration_smoke/anomaly-truth-20260926-092937-183148-1c56df3e/existing_two_file_fixture/reports/report-20260926-112937.md",
+      "trace": "data/integration_smoke/anomaly-truth-20260926-092937-183148-1c56df3e/existing_two_file_fixture/traces/trace-20260926-112937.json",
+      "checked": true
+    },
+    {
+      "case": "within_limit_deviation",
+      "machine_id": "M2",
+      "head_id": "H05",
+      "question": "Find torque anomalies for head 5 for machine M2 from 2026-02-02T00:00:00 until 2026-02-02T00:00:53",
+      "n_observed": 52,
+      "n_truth": 3,
+      "n_flagged": 2,
+      "boundary_events": 1,
+      "selected_head_boundary_events": 1,
+      "tp": 2,
+      "fp": 0,
+      "fn": 1,
+      "tn": 49,
+      "precision": 1.0,
+      "recall": 0.6666666666666666,
+      "false_positive_rate": 0.0,
+      "missed_event_ids": [
+        [
+          "2026-02-02T00:00:11",
+          "M2",
+          "H05"
+        ]
+      ],
+      "flagged_event_ids": [
+        [
+          "2026-02-02T00:00:20",
+          "M2",
+          "H05"
+        ],
+        [
+          "2026-02-02T00:00:30",
+          "M2",
+          "H05"
+        ]
+      ],
+      "flagged_reasons": {
+        "2026-02-02 00:00:20.000000": "above_expected_max|statistical_deviation",
+        "2026-02-02 00:00:30.000000": "below_expected_min|statistical_deviation"
+      },
+      "source_sha256": [
+        "c7624f822ecf9b03e416d08f57a98d06881db336f22a2e23dab0ed20e7754eb6",
+        "13be487f64cc09df95dc5382f53c3ec77c836516bb010f1815e5819c166206c9"
+      ],
+      "report": "data/integration_smoke/anomaly-truth-20260926-092937-183148-1c56df3e/within_limit_deviation/reports/report-20260926-112937.md",
+      "trace": "data/integration_smoke/anomaly-truth-20260926-092937-183148-1c56df3e/within_limit_deviation/traces/trace-20260926-112937.json",
+      "checked": true
+    }
+  ],
+  "aggregate": {
+    "tp": 4,
+    "fp": 0,
+    "fn": 1,
+    "tn": 59,
+    "precision": 1.0,
+    "recall": 0.8,
+    "false_positive_rate": 0.0
+  },
+  "labels": "predeclared synthetic torque deviations, not confirmed physical machine faults",
+  "definition": "precision=TP/(TP+FP); recall=TP/(TP+FN); false_positive_rate=FP/(FP+TN); event IDs=(stored timestamp,machine,head)",
+  "scope": "Two short synthetic pools, exact +1 events and deterministic rules routing; configured 1.5\u20132.5 Nm and sigma=3.0; neither real-data fault prevalence nor physical failure detection is measured.",
+  "limits": [
+    "In-range contextual deviation is a predeclared synthetic label, not a verified bad closure or a confirmed engineering specification.",
+    "Score depends on selected fixture, thresholds, pooled mean and sample standard deviation.",
+    "The evaluator uses known valid question phrasing; it does not test arbitrary language or live Ollama.",
+    "Do not extrapolate rates from these small controlled fixtures to factory production."
+  ]
+}

@@ -38,3 +38,44 @@ language. The earlier real-data and live-model evidence remains separate in
 `benchmarks/integration/`. A presentation should show the case results and a
 saved trace as well as any score; report unexpected failures rather than
 silently deleting a case.
+
+## Planted anomaly ground-truth measurement
+
+From the repository root, run a second, **separate** evaluation:
+
+```bash
+.venv/bin/python -m scripts.evaluate_anomaly_ground_truth
+```
+
+The frozen labels and fixture specifications are in
+[`benchmarks/evaluation/anomaly_truth_v1.json`](../benchmarks/evaluation/anomaly_truth_v1.json).
+The script builds two synthetic two-file pools, verifies observed events
+against an independent scalar read of the CSVs, asks the production rules
+planner for anomaly flags, and matches returned `(timestamp, machine_id,
+head_id)` identifiers to the predeclared positive labels. Identical torque
+values alone never establish identity. The original four-head fixture has
+two out-of-range H05 values among 12 H05 events and retains four cross-file
+events across all heads. A separate 52-event H05 fixture has three planted
+deviations: two out of range and one **2.3 Nm** contextual deviation within
+the configured 1.5–2.5 Nm limits. The latter is intentionally harder for a
+pooled mean/standard-deviation rule to detect.
+
+The script saves a JSON summary and each case's CSV files, manifest, report
+and trace under ignored `data/integration_smoke/anomaly-truth-*/`. Pass
+`--evidence PATH` to choose a JSON destination. The first measurement on the
+uploaded source ZIP is retained as
+[`benchmarks/integration/anomaly_ground_truth_v1.json`](../benchmarks/integration/anomaly_ground_truth_v1.json).
+
+| Case | Observations | True positive | False positive | Missed positive | True negative |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Existing two-file fixture, H05 | 12 | 2 | 0 | 0 | 10 |
+| In-range contextual deviation, H05 | 52 | 2 | 0 | 1 | 49 |
+| **Combined** | **64** | **4** | **0** | **1** | **59** |
+
+**Precision = TP/(TP+FP) = 100%; recall = TP/(TP+FN) = 80%; false positive
+rate = FP/(FP+TN) = 0%** on these planted labels. The missed 2.3 Nm value is
+evidence of a limitation, not an input to retune the algorithm after looking
+at the answers. The second label represents a deliberately planted torque
+deviation relative to fixture baseline; neither label set is independent
+ground truth for physical cap faults. These small synthetic rates cannot be
+generalized to factory data, other thresholds, or unknown failure prevalence.
