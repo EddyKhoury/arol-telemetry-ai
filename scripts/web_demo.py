@@ -40,7 +40,9 @@ except ValueError as exc:
     st.stop()
 
 machine = manifest["summary"]["machine_id"]
-st.caption(f"Selected machine: {machine} | Planner: rules")
+st.caption(f"Selected machine: {machine} | Head diagnostic and scoped analytics (registered tools)")
+st.info("For a head diagnostic, give a bounded time window in your question. "
+        "The selected machine above will be used if you do not name one.")
 
 window = (
     f"for machine {machine} from 2026-02-01T00:00:00 "
@@ -48,11 +50,17 @@ window = (
 )
 examples = {
     "Write my own question": "",
+    "Head 4 diagnostic — ask for window": "Is there any problem with head 4?",
+    "Head 4 diagnostic — sample hour": (
+        "Is there any problem with head 4 from 2026-02-01T00:00:00 "
+        "until 2026-02-01T01:00:00?"
+    ),
     "Torque summary and distribution": (
         "Summarize torque and show its distribution with 10 bins "
         f"{window} for head 5 for successful closures"
     ),
     "Head 5 success rate": f"Success rate for head 5 {window}",
+    "Head 5 evidence check": f"Is anything wrong with head 5 {window}",
 }
 
 chosen = st.selectbox("Choose an example", list(examples))
@@ -86,23 +94,30 @@ if st.button("Analyze", type="primary"):
         cfg.setdefault("data", {}).update(
             source="person_a_pool", person_a={"demo": str(manifest_path)}
         )
-        cfg.setdefault("agent", {})["planner"] = "rules"
+        cfg.setdefault("agent", {})["planner"] = "diagnostic"
 
         try:
             with st.spinner("Analyzing the selected event window..."):
                 response_json, status = answer_one(
                     query, cfg, st.session_state["output_dir"], sequence,
-                    json_output=True, plots=True,
+                    json_output=True, plots=True, selected_machine=machine,
                 )
             payload = json.loads(response_json)
             assert status == payload["status"]
             st.session_state["result"] = payload
+        except ValueError as exc:
+            if "agent.planner must be" in str(exc):
+                st.error("The website has newer code than the running analysis server. "
+                         "Restart Streamlit, then refresh this page and try again.")
+            else:
+                st.error(f"Analysis could not be completed: {type(exc).__name__}: {exc}")
         except Exception as exc:
             # Keep errors visible during this local presentation demo.
             st.error(f"Analysis could not be completed: {type(exc).__name__}: {exc}")
 
 payload = st.session_state.get("result")
 if payload is not None:
+    st.caption(f"Analysis route: {payload['planner']}")
     status = payload["status"]
     if status == "ok":
         st.success("Analysis completed")
@@ -126,9 +141,11 @@ if payload is not None:
         )
 
     trace_json = json.dumps(payload["trace"], indent=2, ensure_ascii=False)
-    with st.expander("Execution trace and planned tools"):
+    with st.expander("Execution trace and planned tools", expanded=True):
         st.write("Planned calls:", payload["planned_calls"])
         st.json(payload["trace"])
+    with st.expander("Tool results", expanded=True):
+        st.json(payload["results"])
 
     st.download_button(
         "Download Markdown report", saved_markdown,

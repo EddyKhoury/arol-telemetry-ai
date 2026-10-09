@@ -26,3 +26,7 @@ analytics:
   drift_window_seconds: 3600
   idle_window_seconds: 300
   anomaly_sigma: 3.0
+
+agent:
+  llm:
+    model: qwen2.5-coder:14b

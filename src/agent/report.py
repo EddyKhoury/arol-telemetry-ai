@@ -441,6 +441,17 @@ def assemble(query, plan, results, pool_meta, trace, *, min_n=30) -> str:
         limits.append(f"- `{name}` produced no result: {result.get('error')}")
     for warning in pool_meta.get("warnings", []):
         limits.append(f"- {warning}")
+    if {"compare_head_success", "detect_torque_anomalies"}.issubset(
+        {name for name, _ in plan.calls}
+    ):
+        limits.append(
+            "- This head-health check describes observed events and configured "
+            "torque flags. The torque check includes all observed statuses, "
+            "including No Load and cap-absent events; inspect event classes "
+            "behind flags. Confirm engineering torque limits, source rows, "
+            "and comparable operating conditions before deciding whether a "
+            "head has a fault; these results do not support a yes/no fault verdict."
+        )
     if not limits:
         limits.append(f"- All analyses met the minimum sample size "
                       f"(min_n={min_n}); sample sizes are reported per tool.")

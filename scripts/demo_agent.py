@@ -60,14 +60,15 @@ def examples(manifest: dict) -> list[str]:
 
 
 def answer_one(question: str, cfg: dict, output: Path, sequence: int,
-               *, json_output: bool = False, plots: bool = False) -> tuple[str, str]:
+               *, json_output: bool = False, plots: bool = False,
+               selected_machine: str | None = None) -> tuple[str, str]:
     """Give each question separate report and trace directories to avoid collisions."""
     settings = deepcopy(cfg)
     folder = output / f'question-{sequence:03d}'
     settings['agent']['report_dir'] = str(folder / 'reports')
     settings['agent']['trace_dir'] = str(folder / 'traces')
     engine = Orchestrator(cfg=settings)
-    result = engine.answer(question, pool='demo')
+    result = engine.answer(question, pool='demo', selected_machine=selected_machine)
     artifacts = engine.deliver(result, formats=['markdown', 'plots'] if plots else ['markdown'])
     delivered = Path(artifacts['report']).read_text(encoding='utf-8')
     trace = result['trace'].to_dict()
@@ -89,8 +90,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--manifest', help='Existing partitioned event-pool manifest; optional if exactly one exists')
     parser.add_argument('--question', action='append', help='Ask one question (repeat for multiple reports)')
     parser.add_argument('--examples', action='store_true', help='Print three scoped questions for this pool')
-    parser.add_argument('--planner', choices=('rules', 'llm'), default='rules',
-                        help='Rules by default; LLM only for previously verified single torque analyses')
+    parser.add_argument('--planner', choices=('rules', 'diagnostic', 'llm'), default='rules',
+                        help='Rules by default; diagnostic explains scoped head evidence; llm is experimental single-torque planning')
     parser.add_argument('--json', action='store_true', help='Output one JSON object per question')
     parser.add_argument('--plots', action='store_true', help='Save PNG figures and embed links in reports where tool outputs permit')
     parser.add_argument('--output', type=Path, help='Parent directory for a new isolated report session')

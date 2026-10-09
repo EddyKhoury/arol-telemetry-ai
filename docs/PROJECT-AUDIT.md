@@ -7457,3 +7457,73 @@ remain unreconstructed, the plant timestamp timezone is unconfirmed, and low
 torque readings require source-row and engineering-limit review. **Next:**
 use this local page during the presentation and keep the CLI and labelled
 synthetic sample reports as backups.
+
+## Scoped head-health routing repair (2026-10-09)
+
+Removed the loose generic keyword plans in `src/agent/planner.py` that named
+unregistered `anomaly_heads`, `idle_periods`, and `throughput` tools and could
+silently drop scope. The existing strict torque, KPI, temporal, idle, and
+head-comparison routes remain in place. The former unscoped “is anything wrong
+with head 5” example now shows a machine and bounded time window, and the web
+demo includes a fully scoped H05 evidence-check example.
+
+The exact unscoped question `Is anything wrong with head 5?` now asks for one
+machine and a bounded time window in plain language, without loading data or
+calling a tool. A scoped form plans registered `compare_head_success` and
+`detect_torque_anomalies`. The event-pool reader preserves all heads and
+statuses for the peer comparison, then the anomaly tool filters to H05. It
+rejects mismatched head, machine, time, or status arguments before reading.
+The report presents observed denominators, peer differences, torque flags,
+configured checks, and an explicit no-verdict caveat. Torque flags include
+all observed statuses, so No Load and cap-absent readings need separate review.
+
+Focused routing/KPI tests passed (160); the full suite passed **872 tests**.
+A real-pool one-hour H05 run returned `ok` with two registered calls: 844/844
+confirmed cap-present successes versus a 100% eligible-peer median, and 497
+torque flags among 1,341 finite H05 observations across all statuses. These
+figures describe the selected recorded events only. The torque bounds are
+configured values that still need engineering confirmation; counter gaps,
+source rows, operating conditions, and event classes behind the flags need
+review before interpreting them as a physical fault.
+
+## Evidence-based head diagnostic in the web demo (2026-10-09)
+
+The previous "Local LLM" web label was misleading: the existing LLM planner
+validates only five single-tool torque analyses. It is again the `llm` planner
+without a widened scope validator, and the web demo no longer selects it.
+The CLI describes it as experimental torque planning. The earlier general
+LLM intent selector and free-form summary were removed from this demo path.
+
+The separate `diagnostic` planner recognizes bounded questions such as
+"Is there any problem with head 4?". The page visibly names the selected
+machine, which the planner may use when the question omits one. It still
+requires a bounded time window before reading any events; conflicting machine
+names, extra status filters, and threshold changes stop for clarification.
+With valid scope it calls only registered `compare_head_success` and
+`detect_torque_anomalies`, then writes a plain-English summary from those
+actual tool results. The detailed report, raw tool results, and execution
+trace remain visible. The summary reports cap-present and torque denominators,
+the eligible-peer median when available, and limits from incomplete event
+coverage and unconfirmed operating bounds. It gives no yes/no fault verdict.
+
+A real-pool H04 check for 2026-02-01 00:00–01:00 returned `ok` with two
+registered calls: 844/844 confirmed cap-present successes, a 100% median
+among 35 eligible other heads, and 497 torque flags among 1,341 finite H04
+observations across all recorded statuses, including No Load. These figures
+describe selected recorded events, not complete production or a confirmed
+physical fault. Regression tests cover the missing window, selected machine,
+conflicting scope, web answer bridge, visible results and trace, and the
+unchanged strict LLM gate. Run the production suite with
+`python -m pytest -q tests`; repository-wide discovery also finds archived
+duplicate test modules under `data/` and `dev-installers/`.
+
+The final production suite passed **879 tests**, including a Streamlit AppTest
+that checks both the missing-window clarification and the scoped diagnostic
+page with its trace and tool-result panels.
+
+The live page later showed `agent.planner must be 'rules' or 'llm'` for a
+diagnostic request. This was a stale Streamlit process: it had loaded the old
+`src.agent.planner` before the new mode existed, while the page script had
+rerun with its updated UI. Restarting the localhost server replaced that
+process; port 8501 then responded from a new PID. The web page now gives an
+explicit restart instruction if this planner-version mismatch recurs.

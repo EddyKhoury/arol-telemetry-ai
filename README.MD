@@ -123,6 +123,10 @@ or recreate them using `.venv/bin/python -m scripts.generate_sample_reports`.
 
 Every question gets its own Markdown report and JSON trace under `data/demo_runs/session-.../question-.../`. The report states the filters, event population, definitions, numerical findings, and limits; the trace lists planning, loading, tool calls, and any clarification or error. Unsupported or ambiguous questions produce `needs_clarification` with **zero analysis tool calls**. For example, asking an unrelated general-knowledge question does not turn this project into a general chatbot. The CLI returns exit status `2` for a non-`ok` result, while still saving the report and trace.
 
+For a local head check, run `.venv/bin/streamlit run scripts/web_demo.py` from the repository root and open the local URL it prints. The page clearly shows the selected machine. Ask `Is there any problem with head 4?` and it will request a bounded time window before reading events. With a window, it compares confirmed cap-present success against eligible peers and checks torque flags through registered tools. The short diagnostic answer and the detailed report state the observed evidence and why it cannot establish a yes/no fault verdict. The page exposes planned calls, the execution trace, and tool results. The same route is available in the CLI with `--planner diagnostic`, where the machine must be named in the question.
+
+After changing backend Python files while Streamlit is running, restart the local server. A page rerun can retain an older imported planner module even while showing updated page code.
+
 The source normally limits materialized events to **1,000,000** per request (`data.max_loaded_events`); narrow the machine, head, or time window when a query exceeds this limit. A peer comparison deliberately loads the other heads in the same machine/time window, because the specified head is the focus of the comparison.
 
 ## Architecture
@@ -134,7 +138,7 @@ flowchart TD
     CSV["Telemetry CSV files"] --> Parse["Parse and validate readings"]
     Parse --> Detect["Check counters across files; emit exact +1 events"]
     Detect --> Pool["Raw and event Parquet partitions + manifest"]
-    Question["Scoped question"] --> Plan["Rules planner or bounded Ollama planner"]
+    Question["Scoped question"] --> Plan["Rules or diagnostic planner; optional experimental torque LLM"]
     Plan --> Guard["Validate tool and requested scope"]
     Pool --> Source["Select Parquet event rows or raw statuses"]
     Guard --> Source
@@ -170,7 +174,7 @@ Some questions intentionally call two compatible tools in one scoped load, such 
 
 ## Optional local LLM
 
-The default `--planner rules` routes supported wording deterministically and needs no model. `--planner llm` talks to an Ollama server at `http://localhost:11434` using the model configured in `agent.llm.model` (default `llama3.2:3b`). You can override the model in a local `config.local.yaml`:
+The default `--planner rules` routes supported wording deterministically and needs no model. `--planner llm` talks to an Ollama server at `http://localhost:11434` using the model configured in `agent.llm.model` (default `qwen2.5-coder:14b`). You can override the model in a local `config.local.yaml`:
 
 ```yaml
 agent:
@@ -182,16 +186,16 @@ agent:
     seed: 42
 ```
 
-Then check that Ollama is running and the chosen tag appears in `ollama list`, and ask **one supported torque question**:
+Then check that Ollama is running and the chosen tag appears in `ollama list`, and ask one supported torque question:
 
 ```bash
 .venv/bin/python -m scripts.demo_agent \
   --manifest data/event_pools/my-pool/manifest.json \
   --planner llm \
-  --question 'Average torque for head 5 for machine MCC777eda3db57348ef8a3113a642ae74db from 2026-02-01T00:00:00 until 2026-02-01T12:00:00 for successful closures'
+  --question 'Average torque for head 5 for machine MCC777eda3db57348ef8a3113a642ae74db from 2026-02-01T00:00:00 until 2026-02-01T01:00:00 for successful closures'
 ```
 
-**Important:** `config.local.yaml` is not listed in the current `.gitignore`; keep local machine settings and any secrets out of commits. No API key is required for the default localhost Ollama connection. The bounded LLM planner accepts only five verified **single** torque analyses in the known grammar. It checks the model's proposed tool and every explicit filter against the verified request; unsupported requests or invalid proposals stop for clarification. If transport fails, fallback to rules is configurable and labelled in the trace. KPI questions and supported combined analyses use the rules planner. One scoped real-data Qwen run was previously verified, but that does not establish broad live-model routing accuracy.
+**Important:** `config.local.yaml` is not listed in the current `.gitignore`; keep local machine settings and any secrets out of commits. No API key is required for localhost Ollama. `--planner llm` is an **experimental torque planner** restricted to five verified single-tool torque analyses. Its existing scope validator rejects changed arguments, combined analyses, KPI questions, and head-health questions before data access. Transport fallback to rules, when enabled, is labelled in the trace. The website's head diagnostic is a separate evidence-based route and does not use this LLM mode.
 
 ## Data definitions and limits
 

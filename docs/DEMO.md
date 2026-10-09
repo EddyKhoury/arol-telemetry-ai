@@ -54,11 +54,15 @@ Try a bounded success-rate question or a daily observed-throughput question:
   'Machine idle for machine MCC777eda3db57348ef8a3113a642ae74db from 2026-02-01T00:00:00 until 2026-02-01T01:00:00'
 ```
 
-The default planner is deterministic rules. `--planner llm` requests the
-configured local model and currently permits only the five previously checked
-single torque analyses. Validation refuses model proposals that change the
-requested tool or scope; transport fallback, when enabled, appears in the
-trace. Other analyses remain available through the deterministic planner.
+The CLI defaults to deterministic rules. `--planner diagnostic` adds a
+head-health answer from registered peer-success and torque-anomaly results.
+It requires an explicit machine and bounded time window in the CLI. The web
+demo shows its selected machine and can use it for this diagnostic; an
+unbounded question asks for a window before loading data. The page displays
+the short evidence-based answer, detailed report, trace, and tool results.
+`--planner llm` remains an experimental single-tool torque planner. Its
+existing scope validator rejects head-health and KPI questions; the web demo
+does not present it as a general answer mode.
 
 The event source caps loaded rows using `data.max_loaded_events` (default
 1,000,000). A broad request asks for narrower scope without collecting the

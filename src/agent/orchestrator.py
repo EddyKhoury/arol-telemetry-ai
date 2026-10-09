@@ -25,7 +25,8 @@ class Orchestrator:
 
     # -- the loop ----------------------------------------------------------
 
-    def answer(self, query: str, pool: str | None = None) -> dict:
+    def answer(self, query: str, pool: str | None = None,
+               selected_machine: str | None = None) -> dict:
         trace = Trace(query, planner=self.planner.name)
 
         if pool is None:
@@ -46,7 +47,7 @@ class Orchestrator:
                     "trace": trace,
                 }
             pool = available[0]
-        plan = self.planner.plan(query, {"pool": pool})
+        plan = self.planner.plan(query, {"pool": pool, "selected_machine": selected_machine})
 
         # A planner that quietly fell back must say so: the report header
         # names the planner, and naming the one we asked for rather than the
@@ -157,6 +158,11 @@ class Orchestrator:
 
         markdown = report_mod.assemble(query, plan, results, meta, trace,
                                        min_n=self.min_n)
+        if status == "ok" and callable(getattr(self.planner, "explain", None)):
+            explanation = self.planner.explain(query, results, markdown)
+            if explanation:
+                trace.step("explain", method=self.planner.name, ok=True)
+                markdown = explanation + "\n" + markdown
         trace.step("assemble", chars=len(markdown))
 
         return {

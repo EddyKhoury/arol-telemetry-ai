@@ -70,6 +70,7 @@ COMBINED_TOOLS = {
     frozenset({"success_rate", "success_rate_per_head"}),
     frozenset({"torque_stats", "torque_distribution"}),
     frozenset({"torque_trend", "detect_torque_anomalies"}),
+    frozenset({"compare_head_success", "detect_torque_anomalies"}),
 }
 
 
@@ -78,9 +79,19 @@ def _read_plan(calls):
         raise ValueError("Use exactly one analysis or one supported two-tool combination")
     parsed = [_read_parameters([call]) for call in calls]
     if len(parsed) == 2:
-        if frozenset(item[0] for item in parsed) not in COMBINED_TOOLS:
-            raise ValueError("Use exactly one analysis or a supported statistics/distribution, trend/anomalies or KPI pair")
-        if parsed[0][2:] != parsed[1][2:]:
+        tools = frozenset(item[0] for item in parsed)
+        if tools not in COMBINED_TOOLS:
+            raise ValueError("Use exactly one analysis or a supported statistics/distribution, trend/anomalies, KPI or head-health pair")
+        if tools == {"compare_head_success", "detect_torque_anomalies"}:
+            comparison = next(item for item in parsed if item[0] == "compare_head_success")
+            anomalies = next(item for item in parsed if item[0] == "detect_torque_anomalies")
+            required = {"machine_id", "start", "end", "head_id"}
+            if (set(comparison[1]) != required or comparison[1] != anomalies[1]
+                    or comparison[3] is not None or anomalies[3] is not None):
+                raise ValueError("Head-health checks require the same head, machine and time window without status filters")
+            # The comparison needs all peer heads; the anomaly tool applies
+            # head_id itself after the shared machine/time population is read.
+        elif parsed[0][2:] != parsed[1][2:]:
             raise ValueError("Combined analyses must use exactly the same head, machine, time and status scope")
     return parsed
 
@@ -196,7 +207,8 @@ class EventPoolSource:
 
     def load_for_plan(self, pool, calls):
         parsed = _read_plan(calls)
-        name, args, scope, status = parsed[0]
+        population_call = next((item for item in parsed if item[0] == 'compare_head_success'), parsed[0])
+        name, args, scope, status = population_call
         if name in {'kpi_over_time', 'observed_throughput'}:
             from ..analytics.registered_temporal_kpi import validate_request, TooManyTimeBuckets
             try:
