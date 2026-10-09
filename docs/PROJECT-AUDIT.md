@@ -7409,3 +7409,21 @@ The screenshot does not independently establish the raw value frequencies or
 explain the low readings. Next: review, commit and push the six-file correction;
 validate those low values against original telemetry before interpreting them
 as physical faults or sensor errors.
+
+## Repository cleanup after plot correction (2026-10-09)
+
+Commit `01127e7` was pushed to `main` and the user's checkout was clean.
+Removed `docs/PROJECT_AUDIT.md`, an obsolete Person A Step 5 snapshot that
+reported Step 6 as pending. The maintained `docs/PROJECT-AUDIT.md` contains
+its technical history and later integration checkpoints; no active code,
+README link, test or script refers to the underscored filename. The original
+snapshot remains recoverable from Git history.
+
+Retained `data/sample.csv` because loader tests use it; retained benchmark
+records, sample reports, function references, tests and the presentation as
+submission and reproducibility evidence. No program behavior changed. The
+review of the uploaded ZIP found no tracked virtual environment, installer
+folder, generated demo session or backup directory. **Next:** apply this
+tracked-file cleanup to the user's Git checkout, review the staged deletion
+and audit note, commit and push. Preserve private telemetry and ignored local
+reports while preparing the live two-report demonstration.
